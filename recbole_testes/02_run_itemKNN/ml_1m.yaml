@@ -1,0 +1,37 @@
+field_separator: "\t"
+seq_separator: " "
+
+dataset: ml-1m
+data_path: ./data/atomic/
+
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: item_id
+RATING_FIELD: rating
+TIME_FIELD: timestamp
+
+load_col:
+    inter: [user_id, item_id, rating, timestamp]
+
+user_inter_num_interval: "[10,inf)"
+item_inter_num_interval: "[10,inf)"
+
+# val_interval:
+#     rating: "[3,inf)"
+
+eval_args:
+    split: {'RS': [8, 1, 1]}
+    group_by: user
+    order: RO
+    mode: full
+
+metrics: [Recall, MRR, NDCG, Hit, MAP, Precision, GAUC]
+topk: [5, 10, 20]
+valid_metric: MRR@10
+metric_decimal_place: 4
+
+k: 5
+shrink: 0.0
+knn_method: item
+
+train_batch_size: 4096
+eval_batch_size: 4096

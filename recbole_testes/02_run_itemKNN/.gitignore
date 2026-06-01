@@ -1,0 +1,7 @@
+# Data
+data/
+
+# RecBole
+log/
+log_tensorboard/
+saved/
