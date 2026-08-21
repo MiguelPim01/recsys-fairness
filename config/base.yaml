@@ -1,0 +1,52 @@
+seed: 42
+reproducibility: true
+repeatable: true
+
+data_path: outputs/tcc/data/recbole
+benchmark_filename: [train, valid, test]
+
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: item_id
+RATING_FIELD: rating
+LABEL_FIELD: rating
+load_col:
+  inter: [user_id, item_id, rating]
+
+eval_args:
+  split:
+    RS: [0.8, 0.1, 0.1]
+  order: RO  
+  group_by: user  
+  mode:
+    valid: labeled    
+    test: labeled
+
+metrics: [RMSE, MAE]
+valid_metric: RMSE
+valid_metric_bigger: false
+train_neg_sample_args: ~
+
+epochs: 100
+eval_step: 1
+stopping_step: 10
+train_batch_size: 1024
+eval_batch_size: 4096
+learning_rate: 0.001
+weight_decay: 0.0
+
+use_gpu: true
+gpu_id: 0
+worker: 0
+show_progress: true
+save_dataset: false
+save_dataloaders: false
+
+evaluation:
+  relevance_threshold: 4.0  
+  topk: [5, 10, 20]
+  user_batch_size: 128  
+  item_batch_size: 4096
+
+fairness:
+  plugin: null  
+  parameters: {}

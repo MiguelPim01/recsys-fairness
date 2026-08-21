@@ -8,3 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Testes
+recbole_testes
+
+# Data
+/data/
