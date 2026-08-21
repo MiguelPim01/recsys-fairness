@@ -10,7 +10,7 @@ wheels/
 .venv
 
 # Testes
-recbole_testes
+recbole_testes/
 
 # Data
 /data/
