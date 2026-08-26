@@ -1,0 +1,51 @@
+seed: 42
+reproducibility: true
+repeatable: true
+
+data_path: data/sample
+field_separator: "\t"
+
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: item_id
+RATING_FIELD: play_count
+load_col:
+  inter: [user_id, item_id, play_count]
+  user: [user_id, gender, age, country, signup_date]
+  item: [item_id, musicbrainz_artist_id, artist_name]
+
+epochs: 1
+train_batch_size: 64
+eval_batch_size: 64
+learning_rate: 0.001
+train_neg_sample_args:
+  distribution: uniform
+  sample_num: 1
+  alpha: 1.0
+  dynamic: false
+  candidate_num: 0
+
+eval_args:
+  split:
+    RS: [0.8, 0.1, 0.1]
+  order: RO
+  group_by: user
+  mode: full
+
+metrics: [Recall, NDCG]
+topk: [5, 10]
+valid_metric: NDCG@10
+valid_metric_bigger: true
+
+mf_embedding_size: 64
+mlp_embedding_size: 64
+mlp_hidden_size: [128, 64]
+dropout_prob: 0.1
+mf_train: true
+mlp_train: true
+use_pretrain: false
+
+use_gpu: false
+worker: 0
+show_progress: true
+save_dataset: false
+save_dataloaders: false
