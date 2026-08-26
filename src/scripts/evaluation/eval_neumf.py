@@ -1,4 +1,4 @@
-from src.evaluators.NeuMF_evaluator import NeuMFEvaluator
+from evaluators.neumf_evaluator import NeuMFEvaluator
 from src.sampler.lastfm_sampler import LastFMSampler
 
 

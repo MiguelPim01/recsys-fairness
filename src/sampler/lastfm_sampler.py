@@ -1,8 +1,7 @@
 import csv
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
-
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
