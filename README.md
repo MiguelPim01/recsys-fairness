@@ -15,3 +15,13 @@ uv sync
 
 ## Architecture
 
+```mermaid
+
+flowchart LR
+    A["Raw Datasets"] --> B["Atomic Data"]
+    B --> C["Filtered Data"]
+
+    C --> D["Training and Evaluation"]
+    D --> E["Results"]
+
+```
