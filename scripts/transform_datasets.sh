@@ -12,10 +12,10 @@ fi
 
 case "$dataset" in
     lastfm)
-        exec uv run python -m src.scripts.lastfm_transform "$@"
+        exec uv run python -m src.scripts.datasets.lastfm_transform "$@"
         ;;
     yelp)
-        exec uv run python -m src.scripts.yelp_transform "$@"
+        exec uv run python -m src.scripts.datasets.yelp_transform "$@"
         ;;
     all)
         if (( $# > 0 )); then

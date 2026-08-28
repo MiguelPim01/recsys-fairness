@@ -41,3 +41,30 @@ A densidade foi calculada por `interações / (usuários × itens)`. A diferenç
 ## Considerações metodológicas
 
 A transformação preserva a contagem bruta de reproduções. Portanto, `play_count` ainda não deve ser interpretado como avaliação explícita nem comparado diretamente às notas do Yelp. A futura normalização deverá ser definida e ajustada sem utilizar informações dos conjuntos de validação e teste. Da mesma forma, os valores demográficos ausentes permanecem distinguíveis no arquivo gerado e deverão receber tratamento explícito antes da construção dos agrupamentos de justiça. Os resultados acima descrevem exclusivamente a conversão para RecBole e constituem a linha de base anterior a qualquer amostragem ou filtragem experimental.
+
+# Notas Miguel
+
+### Interações
+
+| Métrica                         |     Quantidade |
+| :------------------------------ | -------------: |
+| Interações totais do dataset    | **17.559.530** |
+| Interações totais transformadas | **17.559.021** |
+
+### Limpeza e Validação
+
+| Métrica                               | Quantidade |
+| :------------------------------------ | ---------: |
+| Linhas duplicadas agregadas           |    **421** |
+| Artistas sem ID e nome                |      **1** |
+| Valores de `play_count` não positivos |      **1** |
+| Usuários com ID sem match com regex   |     **86** |
+| Idades inválidas                      |     **57** |
+
+### Dimensões do Dataset
+
+| Métrica                |  Quantidade |
+| :--------------------- | ----------: |
+| Quantidade de usuários | **359.347** |
+| Quantidade de itens    | **268.602** |
+

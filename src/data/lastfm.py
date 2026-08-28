@@ -1,10 +1,7 @@
 import csv
-import re
 import unicodedata
 from collections import defaultdict
 from pathlib import Path
-
-USER_ID_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 
 class LastFMTransformDataset:
@@ -13,79 +10,105 @@ class LastFMTransformDataset:
     INTERACTIONS_FILENAME = "usersha1-artmbid-artname-plays.tsv"
     PROFILES_FILENAME = "usersha1-profile.tsv"
 
-    def __init__(self, raw_dir: Path | str, output_dir: Path | str) -> None:
+    def __init__(self, raw_dir, output_dir):
         self.raw_dir = Path(raw_dir)
         self.output_dir = Path(output_dir)
 
-    def transform(self) -> dict[str, int]:
+    def transform(self):
+        """
+        Transforms the LastFM-360K dataset into RecBole format.
+
+        Returns:
+            statistics (dict[str, int]): Statistics dictionary.
+        """
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         statistics: defaultdict[str, int] = defaultdict(int)
-        interaction_users, items = self._transform_interactions(statistics)
+
+        # Writing interaction matrix
+        profile_users = self._read_profile_users()
+        interaction_users, items = self._transform_interactions(profile_users, statistics)
+
+        # Writing user and item profiles
         self._transform_users(interaction_users, statistics)
         self._write_items(items)
 
         statistics["users"] = len(interaction_users)
         statistics["items"] = len(items)
+
         return dict(statistics)
 
-    def _transform_interactions(
-        self, statistics: defaultdict[str, int]
-    ) -> tuple[set[str], dict[str, tuple[str, str]]]:
+    def _transform_interactions(self, profile_users, statistics):
+        """
+        Main logic for writing lastfm.inter file.
+
+        Args:
+            profile_users: Set of user IDs from the profile data.
+            statistics: Statistics dictionary.
+
+        Returns:
+            users: Set of user IDs from the interaction data.
+            items: Dictionary mapping item_id to (musicbrainz_artist_id, artist_name).
+        """
         input_path = self.raw_dir / self.INTERACTIONS_FILENAME
         output_path = self.output_dir / "lastfm.inter"
 
-        users: set[str] = set()
-        items: dict[str, tuple[str, str]] = {}
-        current_user: str | None = None
-        current_interactions: dict[str, int] = {}
+        users = set()
+        items = {}
+        current_user = None
+        current_interactions = {}
 
-        with input_path.open(encoding="utf-8", newline="") as input_file, output_path.open(
-            "w", encoding="utf-8", newline=""
-        ) as output_file:
+        with input_path.open(encoding="utf-8", newline="") as input_file, output_path.open("w", encoding="utf-8", newline="") as output_file:
             reader = csv.reader(input_file, delimiter="\t", quoting=csv.QUOTE_NONE)
             writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
-            writer.writerow(
-                ["user_id:token", "item_id:token", "play_count:float"]
-            )
+
+            # Writing header
+            writer.writerow([
+                "user_id:token",
+                "item_id:token",
+                "play_count:float"
+            ])
 
             for row in reader:
                 statistics["raw_interactions"] += 1
+
                 if len(row) != 4:
                     raise ValueError(
                         f"Expected 4 columns at interaction row "
                         f"{statistics['raw_interactions']}"
                     )
 
-                user_id, musicbrainz_id, artist_name, raw_play_count = row
-                user_id = user_id.strip()
+                user_id, musicbrainz_id, artist_name, raw_play_count = map(str.strip, row)
 
-                if USER_ID_PATTERN.fullmatch(user_id) is None:
+                if not user_id:
                     statistics["dropped_invalid_user_rows"] += 1
                     continue
+                if user_id not in profile_users:
+                    statistics["dropped_missing_profile_user_rows"] += 1
+                    continue
 
-                play_count = int(raw_play_count.strip())
+                play_count = int(raw_play_count)
                 if play_count <= 0:
                     statistics["dropped_nonpositive_play_rows"] += 1
                     continue
 
-                musicbrainz_id = musicbrainz_id.strip()
-                artist_name = artist_name.strip()
                 if not musicbrainz_id and not artist_name:
                     statistics["dropped_missing_artist_rows"] += 1
                     continue
+
+                # IDs will be MBID or the artist name
                 item_id = self._item_id(musicbrainz_id, artist_name)
 
                 if user_id != current_user:
                     if current_user is not None:
-                        self._write_user_interactions(
-                            writer, current_user, current_interactions, statistics
-                        )
+                        self._write_user_interactions(writer, current_user, current_interactions, statistics)
+
                     if user_id in users:
                         raise ValueError(
                             "The interactions file is not grouped by user; "
                             f"user {user_id} appears more than once"
                         )
+
                     current_user = user_id
                     current_interactions = {}
                     users.add(user_id)
@@ -99,44 +122,22 @@ class LastFMTransformDataset:
                 items.setdefault(item_id, (musicbrainz_id, artist_name))
 
             if current_user is not None:
-                self._write_user_interactions(
-                    writer, current_user, current_interactions, statistics
-                )
+                self._write_user_interactions(writer, current_user, current_interactions, statistics)
 
         return users, items
 
-    @staticmethod
-    def _write_user_interactions(
-        writer: csv.writer,
-        user_id: str,
-        interactions: dict[str, int],
-        statistics: defaultdict[str, int],
-    ) -> None:
-        for item_id, play_count in interactions.items():
-            writer.writerow([user_id, item_id, play_count])
-            statistics["written_interactions"] += 1
+    def _read_profile_users(self):
+        """
+        Reads all users so we don't compute unnecessary interactions later on.
 
-    def _transform_users(
-        self, interaction_users: set[str], statistics: defaultdict[str, int]
-    ) -> None:
+        Returns:
+            users: Set of user IDs from the profile data.
+        """
         input_path = self.raw_dir / self.PROFILES_FILENAME
-        output_path = self.output_dir / "lastfm.user"
-        written_users: set[str] = set()
+        users = set()
 
-        with input_path.open(encoding="utf-8", newline="") as input_file, output_path.open(
-            "w", encoding="utf-8", newline=""
-        ) as output_file:
+        with input_path.open(encoding="utf-8", newline="") as input_file:
             reader = csv.reader(input_file, delimiter="\t", quoting=csv.QUOTE_NONE)
-            writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
-            writer.writerow(
-                [
-                    "user_id:token",
-                    "gender:token",
-                    "age:float",
-                    "country:token",
-                    "signup_date:token",
-                ]
-            )
 
             for row_number, row in enumerate(reader, start=1):
                 if len(row) != 5:
@@ -144,71 +145,138 @@ class LastFMTransformDataset:
                         f"Expected 5 columns at profile row {row_number}"
                     )
 
-                user_id, gender, raw_age, country, signup_date = row
-                user_id = user_id.strip()
+                user_id = row[0].strip()
+                users.add(user_id)
+
+        return users
+
+    def _transform_users(self, interaction_users, statistics):
+        """
+        Writes user data to lastfm.user file:
+            - user_id
+            - gender
+            - age
+            - country
+            - signup_date
+
+        Args:
+            interaction_users: Set of user IDs from the interaction data.
+            statistics: Statistics dictionary.
+        """
+        input_path = self.raw_dir / self.PROFILES_FILENAME
+        output_path = self.output_dir / "lastfm.user"
+        written_users: set[str] = set()
+
+        with input_path.open(encoding="utf-8", newline="") as input_file, output_path.open("w", encoding="utf-8", newline="") as output_file:
+            reader = csv.reader(input_file, delimiter="\t", quoting=csv.QUOTE_NONE)
+            writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
+
+            # Writing header
+            writer.writerow([
+                "user_id:token",
+                "gender:token",
+                "age:float",
+                "country:token",
+                "signup_date:token",
+            ])
+
+            for row_number, row in enumerate(reader, start=1):
+                if len(row) != 5:
+                    raise ValueError(
+                        f"Expected 5 columns at profile row {row_number}"
+                    )
+
+                user_id, gender, raw_age, country, signup_date = map(str.strip, row)
+
                 if user_id not in interaction_users:
                     continue
                 if user_id in written_users:
                     raise ValueError(f"Duplicate user profile for {user_id}")
 
                 age = self._valid_age(raw_age)
-                if raw_age.strip() and not age:
+                if raw_age and not age:
                     statistics["invalid_ages"] += 1
 
-                writer.writerow(
-                    [
-                        user_id,
-                        gender.strip(),
-                        age,
-                        country.strip(),
-                        signup_date.strip(),
-                    ]
-                )
+                # Adding user data
+                writer.writerow([
+                    user_id,
+                    gender,
+                    age,
+                    country,
+                    signup_date,
+                ])
+
                 written_users.add(user_id)
 
-        missing_profiles = interaction_users - written_users
-        if missing_profiles:
-            raise ValueError(
-                f"Missing profiles for {len(missing_profiles)} interaction users"
-            )
+        missing_count = len(interaction_users) - len(written_users)
+        if missing_count:
+            raise ValueError(f"Missing profiles for {missing_count} interaction users")
 
         statistics["written_user_profiles"] = len(written_users)
 
-    def _write_items(self, items: dict[str, tuple[str, str]]) -> None:
+    def _write_items(self, items):
+        """
+        Writes item data to lastfm.item file:
+            - item_id
+            - musicbrainz_artist_id
+            - artist_name
+
+        Args:
+            items: Dictionary mapping item_id to (musicbrainz_artist_id, artist_name).
+        """
         output_path = self.output_dir / "lastfm.item"
 
         with output_path.open("w", encoding="utf-8", newline="") as output_file:
             writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
-            writer.writerow(
-                [
-                    "item_id:token",
-                    "musicbrainz_artist_id:token",
-                    "artist_name:token",
-                ]
-            )
+
+            # Writing header
+            writer.writerow([
+                "item_id:token",
+                "musicbrainz_artist_id:token",
+                "artist_name:token",
+            ])
+
+            # Writing item profiles
             for item_id, (musicbrainz_id, artist_name) in items.items():
                 writer.writerow([item_id, musicbrainz_id, artist_name])
 
-    @classmethod
     def _item_id(cls, musicbrainz_id: str, artist_name: str) -> str:
         if musicbrainz_id:
             return musicbrainz_id
 
-        normalized_name = cls._normalize_artist_name(artist_name)
+        normalized_name = " ".join(
+            unicodedata.normalize("NFKC", artist_name).casefold().split()
+        )
+
         if not normalized_name:
             raise ValueError("An artist without a MusicBrainz ID must have a name")
+
         return f"name:{normalized_name}"
 
     @staticmethod
-    def _normalize_artist_name(artist_name: str) -> str:
-        normalized = unicodedata.normalize("NFKC", artist_name)
-        return " ".join(normalized.casefold().split())
+    def _write_user_interactions(writer, user_id, interactions, statistics):
+        """
+        Writes interaction data to lastfm.inter file for a specific user:
+            - user_id
+            - item_id
+            - play_count
+
+        Args:
+            writer: lastfm.inter writer.
+            user_id: User ID.
+            interactions: [item_id, play_count] pairs for the user.
+            statistics: Statistics dictionary.
+        """
+        for item_id, play_count in interactions.items():
+            writer.writerow([user_id, item_id, play_count])
+
+            statistics["written_interactions"] += 1
 
     @staticmethod
     def _valid_age(raw_age: str) -> str:
-        age = raw_age.strip()
-        if not age.isdigit():
+        if not raw_age.isdigit():
             return ""
 
-        numeric_age = int(age)
-        return str(numeric_age) if 1 <= numeric_age <= 120 else ""
+        numeric_age = int(raw_age)
+
+        return str(numeric_age) if numeric_age > 0 else ""
