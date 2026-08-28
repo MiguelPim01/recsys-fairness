@@ -16,7 +16,7 @@ uv sync
 ### Transforming datasets
 
 1. Download the datasets:
-   - LastFM-360K
+   - [LastFM-360K](https://ocelma.net/MusicRecommendationDataset/lastfm-360K.html)
    - [Yelp](https://business.yelp.com/data/resources/open-dataset/)
 
 2. Add the datasets to the folders:
