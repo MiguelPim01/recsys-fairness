@@ -25,6 +25,7 @@ class YelpTransformDataset:
 
         activity_threshold, known_users = self._activity_data()
         known_items = self._item_ids()
+        
         # Transforms interactions
         users, items, reference_date = self._transform_interactions(known_users, known_items, statistics)
         
@@ -37,12 +38,29 @@ class YelpTransformDataset:
         
         return dict(statistics)
 
-    def _transform_interactions(self, known_users, known_items, statistics) -> tuple[set[str], set[str], datetime]:
+    def _transform_interactions(self, known_users, known_items, statistics):
+        """
+        Writes down the interaction matrix.
+            - user_id
+            - item_id
+            - rating
+            - timestamp
+
+        Args:
+            known_users (set[str]): The set of all user IDs in the dataset.
+            known_items (set[str]): The set of all item IDs in the dataset.
+            statistics (defaultdict): The statistics dictionary.
+
+        Returns:
+            users: Dataset users ids.
+            items: Dataset items ids.
+            reference_date: The latest date in the dataset.
+        """
         input_path = self.raw_dir / self.REVIEWS_FILENAME
         output_path = self.output_dir / "yelp.inter"
         
-        users: set[str] = set()
-        items: set[str] = set()
+        users = set()
+        items = set()
         
         reference_date: datetime | None = None
 
@@ -85,13 +103,17 @@ class YelpTransformDataset:
                 items.add(review["business_id"])
                 
                 statistics["interactions"] += 1
-
-        if reference_date is None:
-            raise ValueError("The Yelp review dataset is empty")
         
         return users, items, reference_date
 
-    def _activity_data(self) -> tuple[int, set[str]]:
+    def _activity_data(self):
+        """
+        Gathers the 95% most active users.
+
+        Returns:
+            review_count_threshold (int): The minimum number of reviews a user must have to be considered active.
+            user_ids (set[str]): The set of all user IDs in the dataset. 
+        """
         input_path = self.raw_dir / self.USERS_FILENAME
         
         review_counts = []
@@ -100,20 +122,24 @@ class YelpTransformDataset:
         with input_path.open(encoding="utf-8") as input_file:
             for line in input_file:
                 user = json.loads(line)
+                
                 review_counts.append(int(user["review_count"]))
                 user_ids.add(user["user_id"])
-
-        if not review_counts:
-            raise ValueError("The Yelp user dataset is empty")
 
         review_counts.sort()
         percentile_index = math.ceil(0.95 * len(review_counts)) - 1
         
         return review_counts[percentile_index], user_ids
 
-    def _item_ids(self) -> set[str]:
+    def _item_ids(self):
+        """
+        Gathers the IDs of all businesses in the dataset.
+
+        Returns:
+            item_ids (set[str]): The set of all business IDs in the dataset.
+        """
         input_path = self.raw_dir / self.BUSINESSES_FILENAME
-        item_ids: set[str] = set()
+        item_ids = set()
 
         with input_path.open(encoding="utf-8") as input_file:
             for line in input_file:
@@ -122,10 +148,23 @@ class YelpTransformDataset:
         return item_ids
 
     def _transform_users(self, interaction_users, reference_date, activity_threshold, statistics):
+        """
+        Writes down the user metadata.
+            - user_id
+            - is_active
+            - friend_count
+            - tenure_years
+
+        Args:
+            interaction_users (set[str]): The set of all user IDs in the dataset.
+            reference_date (datetime): The latest date in the dataset.
+            activity_threshold (int): The minimum number of reviews a user must have to be considered active.
+            statistics (defaultdict): The statistics dictionary.
+        """
         input_path = self.raw_dir / self.USERS_FILENAME
         output_path = self.output_dir / "yelp.user"
         
-        written_users: set[str] = set()
+        written_users = set()
 
         with input_path.open(encoding="utf-8") as input_file, output_path.open("w", encoding="utf-8", newline="") as output_file:
             writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
@@ -167,10 +206,28 @@ class YelpTransformDataset:
             raise ValueError(f"Missing metadata for {len(missing_users)} Yelp users")
 
     def _transform_items(self, interaction_items, statistics):
+        """
+        Writes down item metadata.
+            - item_id
+            - business_name
+            - city
+            - state
+            - postal_code
+            - latitude
+            - longitude
+            - stars
+            - review_count
+            - is_open
+            - categories
+        
+        Args:
+            interaction_items (set[str]): The set of all item IDs in the dataset.
+            statistics (defaultdict): The statistics dictionary.
+        """
         input_path = self.raw_dir / self.BUSINESSES_FILENAME
         output_path = self.output_dir / "yelp.item"
         
-        written_items: set[str] = set()
+        written_items = set()
 
         with input_path.open(encoding="utf-8") as input_file, output_path.open("w", encoding="utf-8", newline="") as output_file:
             writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
@@ -218,7 +275,7 @@ class YelpTransformDataset:
             raise ValueError(f"Missing metadata for {len(missing_items)} Yelp businesses")
 
     @staticmethod
-    def _friend_count(friends: str | list[str] | None) -> int:
+    def _friend_count(friends) -> int:
         if not friends or friends == "None":
             return 0
         
@@ -235,11 +292,11 @@ class YelpTransformDataset:
         return round(max(0.0, elapsed_days / cls.DAYS_PER_YEAR), 6)
 
     @staticmethod
-    def _clean_token(value: object) -> str:
+    def _clean_token(value) -> str:
         return " ".join(str(value or "").split())
 
     @classmethod
-    def _categories(cls, categories: str | None) -> str:
+    def _categories(cls, categories) -> str:
         if not categories:
             return ""
         
