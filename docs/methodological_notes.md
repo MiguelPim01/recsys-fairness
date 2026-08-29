@@ -90,16 +90,21 @@ Os dados foram divididos da seguinte maneira:
 
 ```mermaid
 graph LR
-    A["Dados"] --> B["Development"]
-    A --> C["Teste"]
+    A["Dados"] --> B["Dados Development"]
+    A --> C["Dados Teste"]
 
     B --> F1["Fold 1"]
     B --> F2["Fold 2"]
     B --> F3["Fold 3"]
     B --> FN["Fold N"]
 
-    F1 --> T["Treino"]
-    F2 --> T
-    F3 --> T
-    FN --> T
+    F1 --> CV["Validação Cruzada"]
+    F2 --> CV
+    F3 --> CV
+    FN --> CV
+
+    CV --> T["Treino"]
+    T --> TE
+    C --> TE["Teste"]
+    TE --> R["Resultados"]
 ```
