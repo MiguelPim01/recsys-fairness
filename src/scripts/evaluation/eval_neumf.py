@@ -2,8 +2,8 @@ import argparse
 from pathlib import Path
 
 from src.evaluators.neumf_evaluator import NeuMFEvaluator
-from src.sampler.lastfm_cross_val import LastFMCrossValidationSplitter
 from src.sampler.lastfm_sampler import LastFMSampler
+from src.splitters.lastfm_cross_val import LastFMCrossValidationSplitter
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 

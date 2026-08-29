@@ -1,4 +1,4 @@
-from src.sampler.cross_val_interface import ICrossValidationSplitter
+from src.splitters.cross_val_interface import ICrossValidationSplitter
 
 # ----- Config
 DATASET_NAME = "lastfm"
