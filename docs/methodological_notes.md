@@ -48,7 +48,8 @@ Documento contendo todas as decisões metodológicas utilizadas no código.
 
     - Interações com comércios ou usuários sem metadados foram descartadas.
     - Usuários e comércios que possuem metadados mas não possuem interações foram descartados.
-    - 
+
+> Observações: No Yelp dataset um mesmo usuário avaliou um mesmo comércio mais de uma vez em 212.788 interações (aproximadamente 3,15%). Total de interações é 6.990.247.
 
 ---
 
@@ -82,3 +83,23 @@ Documento contendo todas as decisões metodológicas utilizadas no código.
 
 
 ---
+
+## Treinamento e Avaliação
+
+Os dados foram divididos da seguinte maneira:
+
+```mermaid
+graph LR
+    A["Dados"] --> B["Development"]
+    A --> C["Teste"]
+
+    B --> F1["Fold 1"]
+    B --> F2["Fold 2"]
+    B --> F3["Fold 3"]
+    B --> FN["Fold N"]
+
+    F1 --> T["Treino"]
+    F2 --> T
+    F3 --> T
+    FN --> T
+```
