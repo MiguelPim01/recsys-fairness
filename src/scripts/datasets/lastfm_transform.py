@@ -10,7 +10,7 @@ from src.data.lastfm import LastFMTransformDataset
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
-def parse_arguments() -> argparse.Namespace:
+def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Transform LastFM-360K into RecBole atomic files."
     )
@@ -32,15 +32,18 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
+def main():
     arguments = parse_arguments()
+    
+    print("Transforming LastFM-360K into RecBole atomic files...")
     
     transformer = LastFMTransformDataset(arguments.raw_dir, arguments.output_dir)
     statistics = transformer.transform()
 
-    print(f"LastFM atomic files created in {arguments.output_dir.resolve()}")
+    print(f"\nLastFM atomic files created in {arguments.output_dir.resolve()}")
     for name, value in statistics.items():
         print(f"{name}: {value}")
+    print()
 
 
 if __name__ == "__main__":

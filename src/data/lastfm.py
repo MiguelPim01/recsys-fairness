@@ -3,6 +3,8 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
+from tqdm.auto import tqdm
+
 
 class LastFMTransformDataset:
     """Transform the LastFM-360K files into RecBole atomic files."""
@@ -23,14 +25,14 @@ class LastFMTransformDataset:
         """
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        statistics: defaultdict[str, int] = defaultdict(int)
+        statistics = defaultdict(int)
 
         # Writing interaction matrix
         profile_users = self._read_profile_users()
         interaction_users, items = self._transform_interactions(profile_users, statistics)
 
         # Writing user and item profiles
-        self._transform_users(interaction_users, statistics)
+        self._transform_users(interaction_users, len(profile_users), statistics)
         self._write_items(items)
 
         statistics["users"] = len(interaction_users)
@@ -52,6 +54,7 @@ class LastFMTransformDataset:
         """
         input_path = self.raw_dir / self.INTERACTIONS_FILENAME
         output_path = self.output_dir / "lastfm.inter"
+        total_interactions = self._line_count(input_path)
 
         users = set()
         items = {}
@@ -69,7 +72,8 @@ class LastFMTransformDataset:
                 "play_count:float"
             ])
 
-            for row in reader:
+            progress = tqdm(reader, total=total_interactions, desc="  interactions", unit="interaction", dynamic_ncols=True)
+            for row in progress:
                 statistics["raw_interactions"] += 1
 
                 if len(row) != 4:
@@ -150,7 +154,7 @@ class LastFMTransformDataset:
 
         return users
 
-    def _transform_users(self, interaction_users, statistics):
+    def _transform_users(self, interaction_users, total_users, statistics):
         """
         Writes user data to lastfm.user file:
             - user_id
@@ -161,6 +165,7 @@ class LastFMTransformDataset:
 
         Args:
             interaction_users: Set of user IDs from the interaction data.
+            total_users: Total number of users in the profile data.
             statistics: Statistics dictionary.
         """
         input_path = self.raw_dir / self.PROFILES_FILENAME
@@ -180,7 +185,8 @@ class LastFMTransformDataset:
                 "signup_date:token",
             ])
 
-            for row_number, row in enumerate(reader, start=1):
+            progress = tqdm(reader, total=total_users, desc="  users", unit="user", dynamic_ncols=True)
+            for row_number, row in enumerate(progress, start=1):
                 if len(row) != 5:
                     raise ValueError(
                         f"Expected 5 columns at profile row {row_number}"
@@ -237,7 +243,8 @@ class LastFMTransformDataset:
             ])
 
             # Writing item profiles
-            for item_id, (musicbrainz_id, artist_name) in items.items():
+            progress = tqdm(items.items(), total=len(items), desc="  items", unit="item", dynamic_ncols=True)
+            for item_id, (musicbrainz_id, artist_name) in progress:
                 writer.writerow([item_id, musicbrainz_id, artist_name])
 
     def _item_id(cls, musicbrainz_id: str, artist_name: str) -> str:
@@ -271,6 +278,11 @@ class LastFMTransformDataset:
             writer.writerow([user_id, item_id, play_count])
 
             statistics["written_interactions"] += 1
+
+    @staticmethod
+    def _line_count(input_path) -> int:
+        with input_path.open(encoding="utf-8", newline="") as input_file:
+            return sum(1 for _ in input_file)
 
     @staticmethod
     def _valid_age(raw_age: str) -> str:

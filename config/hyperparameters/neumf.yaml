@@ -8,11 +8,11 @@ configurations:
     mf_embedding_size: 64
     mlp_embedding_size: 64
   - learning_rate: 0.0005
-    dropout_prob: 0.1
+    dropout_prob: 0.2
     mf_embedding_size: 32
     mlp_embedding_size: 32
   - learning_rate: 0.0005
-    dropout_prob: 0.1
+    dropout_prob: 0.2
     mf_embedding_size: 64
     mlp_embedding_size: 64
   - learning_rate: 0.001
@@ -24,10 +24,10 @@ configurations:
     mf_embedding_size: 64
     mlp_embedding_size: 64
   - learning_rate: 0.001
-    dropout_prob: 0.1
+    dropout_prob: 0.2
     mf_embedding_size: 32
     mlp_embedding_size: 32
   - learning_rate: 0.001
-    dropout_prob: 0.1
+    dropout_prob: 0.2
     mf_embedding_size: 64
     mlp_embedding_size: 64

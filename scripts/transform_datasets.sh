@@ -22,8 +22,8 @@ case "$dataset" in
             echo "The 'all' option does not accept transformer arguments." >&2
             exit 2
         fi
-        uv run python -m src.scripts.lastfm_transform
-        uv run python -m src.scripts.yelp_transform
+        uv run python -m src.scripts.datasets.lastfm_transform
+        uv run python -m src.scripts.datasets.yelp_transform
         ;;
     *)
         echo "Usage: $0 [lastfm|yelp|all] [transformer arguments]" >&2

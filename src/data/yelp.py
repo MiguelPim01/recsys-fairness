@@ -5,6 +5,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from tqdm.auto import tqdm
+
 
 class YelpTransformDataset:
     """Transform the Yelp Open Dataset into RecBole atomic files."""
@@ -18,10 +20,10 @@ class YelpTransformDataset:
         self.raw_dir = Path(raw_dir)
         self.output_dir = Path(output_dir)
 
-    def transform(self) -> dict[str, int | str]:
+    def transform(self):
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        statistics: defaultdict[str, int | str] = defaultdict(int)
+        statistics = defaultdict(int)
 
         activity_threshold, known_users = self._activity_data()
         known_items = self._item_ids()
@@ -30,8 +32,8 @@ class YelpTransformDataset:
         users, items, reference_date = self._transform_interactions(known_users, known_items, statistics)
         
         # Transforms users and items
-        self._transform_users(users, reference_date, activity_threshold, statistics)
-        self._transform_items(items, statistics)
+        self._transform_users(users, reference_date, activity_threshold, len(known_users), statistics)
+        self._transform_items(items, len(known_items), statistics)
 
         statistics["activity_threshold"] = activity_threshold
         statistics["reference_date"] = reference_date.isoformat(sep=" ")
@@ -58,9 +60,11 @@ class YelpTransformDataset:
         """
         input_path = self.raw_dir / self.REVIEWS_FILENAME
         output_path = self.output_dir / "yelp.inter"
+        total_interactions = self._line_count(input_path)
         
         users = set()
         items = set()
+        interactions = {}
         
         reference_date: datetime | None = None
 
@@ -75,7 +79,8 @@ class YelpTransformDataset:
                 "timestamp:float"
             ])
 
-            for line in input_file:
+            progress = tqdm(input_file, total=total_interactions, desc="  interactions", unit="interaction", dynamic_ncols=True)
+            for line in progress:
                 review = json.loads(line)
                 review_date = datetime.fromisoformat(review["date"])
                 
@@ -92,15 +97,22 @@ class YelpTransformDataset:
                     statistics["dropped_missing_item_interactions"] += 1
                     continue
 
-                writer.writerow([
-                    review["user_id"],
-                    review["business_id"],
-                    review["stars"],
-                    review_date.replace(tzinfo=timezone.utc).timestamp(),
-                ])
+                interaction_id = (review["user_id"], review["business_id"])
+                timestamp = review_date.replace(tzinfo=timezone.utc).timestamp()
+
+                if interaction_id not in interactions or timestamp > interactions[interaction_id][1]:
+                    interactions[interaction_id] = (review["stars"], timestamp)
 
                 users.add(review["user_id"])
                 items.add(review["business_id"])
+
+            for (user_id, item_id), (rating, timestamp) in interactions.items():
+                writer.writerow([
+                    user_id,
+                    item_id,
+                    rating,
+                    timestamp,
+                ])
                 
                 statistics["interactions"] += 1
         
@@ -147,7 +159,7 @@ class YelpTransformDataset:
         
         return item_ids
 
-    def _transform_users(self, interaction_users, reference_date, activity_threshold, statistics):
+    def _transform_users(self, interaction_users, reference_date, activity_threshold, total_users, statistics):
         """
         Writes down the user metadata.
             - user_id
@@ -159,6 +171,7 @@ class YelpTransformDataset:
             interaction_users (set[str]): The set of all user IDs in the dataset.
             reference_date (datetime): The latest date in the dataset.
             activity_threshold (int): The minimum number of reviews a user must have to be considered active.
+            total_users (int): The total number of users in the dataset.
             statistics (defaultdict): The statistics dictionary.
         """
         input_path = self.raw_dir / self.USERS_FILENAME
@@ -177,7 +190,8 @@ class YelpTransformDataset:
                 "tenure_years:float",
             ])
 
-            for line in input_file:
+            progress = tqdm(input_file, total=total_users, desc="  users", unit="user", dynamic_ncols=True)
+            for line in progress:
                 user = json.loads(line)
                 user_id = user["user_id"]
                 
@@ -205,7 +219,7 @@ class YelpTransformDataset:
         if missing_users:
             raise ValueError(f"Missing metadata for {len(missing_users)} Yelp users")
 
-    def _transform_items(self, interaction_items, statistics):
+    def _transform_items(self, interaction_items, total_items, statistics):
         """
         Writes down item metadata.
             - item_id
@@ -222,6 +236,7 @@ class YelpTransformDataset:
         
         Args:
             interaction_items (set[str]): The set of all item IDs in the dataset.
+            total_items (int): The total number of items in the dataset.
             statistics (defaultdict): The statistics dictionary.
         """
         input_path = self.raw_dir / self.BUSINESSES_FILENAME
@@ -246,7 +261,8 @@ class YelpTransformDataset:
                 "categories:token_seq",
             ])
 
-            for line in input_file:
+            progress = tqdm(input_file, total=total_items, desc="  items", unit="item", dynamic_ncols=True)
+            for line in progress:
                 business = json.loads(line)
                 item_id = business["business_id"]
                 
@@ -283,6 +299,11 @@ class YelpTransformDataset:
             return len(friends)
         
         return friends.count(",") + 1
+
+    @staticmethod
+    def _line_count(input_path) -> int:
+        with input_path.open(encoding="utf-8") as input_file:
+            return sum(1 for _ in input_file)
 
     @classmethod
     def _tenure_years(cls, yelping_since: str, reference_date: datetime) -> float:

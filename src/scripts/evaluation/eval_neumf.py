@@ -7,7 +7,7 @@ from src.sampler.lastfm_sampler import LastFMSampler
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
-def parse_arguments() -> argparse.Namespace:
+def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Train and evaluate NeuMF on the LastFM sample."
     )

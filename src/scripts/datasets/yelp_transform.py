@@ -6,7 +6,7 @@ from src.data.yelp import YelpTransformDataset
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
-def parse_arguments() -> argparse.Namespace:
+def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Transform the Yelp Open Dataset into RecBole atomic files."
     )
@@ -25,14 +25,18 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
+def main():
     arguments = parse_arguments()
+    
+    print("Transforming the Yelp Open Dataset into RecBole atomic files...")
+    
     transformer = YelpTransformDataset(arguments.raw_dir, arguments.output_dir)
     statistics = transformer.transform()
 
-    print(f"Yelp atomic files created in {arguments.output_dir.resolve()}")
+    print(f"\nYelp atomic files created in {arguments.output_dir.resolve()}")
     for name, value in statistics.items():
         print(f"{name}: {value}")
+    print()
 
 
 if __name__ == "__main__":
