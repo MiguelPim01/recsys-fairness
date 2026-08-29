@@ -12,9 +12,7 @@ from recbole.data import create_dataset, data_preparation
 from recbole.utils import get_model, get_trainer, init_seed
 from tqdm.auto import tqdm
 
-from src.sampler.lastfm_cross_validation_splitter import (
-    LastFMCrossValidationSplitter,
-)
+from src.sampler.lastfm_cross_validation_splitter import LastFMCrossValidationSplitter
 
 # ----- Config
 LOGGER = logging.getLogger("recsys_fairness.evaluation")
@@ -26,17 +24,6 @@ HYPERPARAMETER_LABELS = {
     "mlp_embedding_size": "mlp_emb",
 }
 # -----
-
-
-class _NoOpTensorboard:
-    """Discard metrics that RecBole's Trainer normally writes to disk."""
-
-    def add_scalar(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
-    def add_hparams(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
 
 class NeuMFEvaluator:
     """Train, cross-validate and tune RecBole's NeuMF."""
@@ -160,7 +147,9 @@ class NeuMFEvaluator:
             "candidates": candidate_results,
             "test_result": test_result,
         }
+        
         LOGGER.info("Test | %s", self._format_metrics(test_result))
+        
         return results
 
     def _evaluate_simple(self):
@@ -203,13 +192,11 @@ class NeuMFEvaluator:
 
         validation = {
             "hyperparameters": {},
-            "fold_results": [
-                {
-                    "fold": 0,
-                    "score": float(best_valid_score),
-                    "metrics": best_valid_result,
-                }
-            ],
+            "fold_results": [{
+                "fold": 0,
+                "score": float(best_valid_score),
+                "metrics": best_valid_result,
+            }],
             "mean_score": float(best_valid_score),
             "std_score": 0.0,
             "mean_metrics": dict(best_valid_result),
@@ -270,7 +257,7 @@ class NeuMFEvaluator:
 
     def _train_development_and_evaluate_test(self, benchmark_filename, hyperparameters):
         """
-        
+        Trains the model on the development data and evaluates it on the test data.
 
         Args:
             benchmark_filename (list[str]): _description_

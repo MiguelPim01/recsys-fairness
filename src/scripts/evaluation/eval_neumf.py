@@ -47,14 +47,14 @@ def main():
     )
     
     dataset_dir = REPOSITORY_ROOT / "data/sample/lastfm"
-    config_path = REPOSITORY_ROOT / "config/models/NeuMF.yaml"
-    hyperparameter_config_path = REPOSITORY_ROOT / "config/hyperparameters/NeuMF.yaml"
+    config_path = REPOSITORY_ROOT / "config/models/neumf.yaml"
+    hyperparameter_config_path = REPOSITORY_ROOT / "config/hyperparameters/neumf.yaml"
 
     # Creating and running evaluation
     evaluator = NeuMFEvaluator(
         dataset_dir=dataset_dir,
         config_path=config_path,
-        search_config_path=hyperparameter_config_path,
+        hp_search_config_path=hyperparameter_config_path,
     )
     
     evaluator.evaluate(

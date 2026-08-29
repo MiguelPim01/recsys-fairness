@@ -13,13 +13,15 @@ load_col:
   user: [user_id, gender, age, country, signup_date]
   item: [item_id, musicbrainz_artist_id, artist_name]
 
-epochs: 1
+epochs: 50
+eval_step: 1
+stopping_step: 5
 train_batch_size: 64
 eval_batch_size: 64
 learning_rate: 0.001
 train_neg_sample_args:
   distribution: uniform
-  sample_num: 1
+  sample_num: 4
   alpha: 1.0
   dynamic: false
   candidate_num: 0
