@@ -1,11 +1,13 @@
 import logging
 import sys
 import warnings
+from functools import partial
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import numpy as np
+import torch
 import yaml
 from recbole.config import Config
 from recbole.data import create_dataset, data_preparation
@@ -47,6 +49,7 @@ class NeuMFEvaluator:
         """
         self._configure_project_logging()
 
+        # 1. If there aren't any cv and hyperparameter search, run simple evaluation.
         if not cross_validation and not hyperparameter_search:
             return self._evaluate_simple()
 
@@ -77,6 +80,7 @@ class NeuMFEvaluator:
             validation_metric,
         )
         
+        # 2. If there are candidates for hyperparameter search, runs the loop
         for candidate_index, hyperparameters in enumerate(candidates, start=1):
             LOGGER.info(
                 "Candidate %d/%d | %s",
@@ -97,6 +101,7 @@ class NeuMFEvaluator:
                 
                 fold_results.append({
                     "fold": fold,
+                    "epoch": run["epoch"],
                     "score": run["score"],
                     "metrics": run["metrics"],
                 })
@@ -125,16 +130,18 @@ class NeuMFEvaluator:
         )
         
         LOGGER.info(
-            "Selected | %s | %s %.4f ± %.4f",
+            "Selected | %s | %s %.4f ± %.4f\n",
             self._format_hyperparameters(best_candidate["hyperparameters"]),
             validation_metric,
             best_candidate["mean_score"],
             best_candidate["std_score"],
         )
 
+        # 3. Final evaluation: trains model with development data and evaluates on test data.
         test_result = self._train_development_and_evaluate_test(
             splitter.final_benchmark(),
             best_candidate["hyperparameters"],
+            best_candidate["median_epoch"],
         )
         
         results = {
@@ -168,6 +175,14 @@ class NeuMFEvaluator:
         
         _, trainer = self._create_model_and_trainer(config, train_data)
 
+        best_epoch = 0
+
+        def save_best_epoch(epoch, valid_score):
+            nonlocal best_epoch
+
+            if valid_score == trainer.best_valid_score:
+                best_epoch = epoch + 1
+
         LOGGER.info(
             "NeuMF: %d users | %d items | %d interactions | %d epoch(s)",
             dataset.user_num - 1,
@@ -179,24 +194,23 @@ class NeuMFEvaluator:
         best_valid_score, best_valid_result = trainer.fit(
             train_data,
             valid_data,
-            saved=False,
+            saved=True,
             show_progress=False,
             verbose=False,
+            callback_fn=save_best_epoch,
         )
         
-        test_result = trainer.evaluate(
-            test_data,
-            load_best_model=False,
-            show_progress=False,
-        )
+        test_result = self._evaluate_saved_model(trainer, test_data)
 
         validation = {
             "hyperparameters": {},
             "fold_results": [{
                 "fold": 0,
+                "epoch": best_epoch,
                 "score": float(best_valid_score),
                 "metrics": best_valid_result,
             }],
+            "median_epoch": best_epoch,
             "mean_score": float(best_valid_score),
             "std_score": 0.0,
             "mean_metrics": dict(best_valid_result),
@@ -244,6 +258,14 @@ class NeuMFEvaluator:
         train_data, valid_data, _ = data_preparation(config, dataset)
         
         _, trainer = self._create_model_and_trainer(config, train_data)
+
+        best_epoch = 0
+
+        def save_best_epoch(epoch, valid_score):
+            nonlocal best_epoch
+
+            if valid_score == trainer.best_valid_score:
+                best_epoch = epoch + 1
         
         best_score, best_result = trainer.fit(
             train_data,
@@ -251,23 +273,30 @@ class NeuMFEvaluator:
             saved=False,
             show_progress=False,
             verbose=False,
+            callback_fn=save_best_epoch,
         )
         
-        return {"score": float(best_score), "metrics": best_result}
+        return {
+            "epoch": best_epoch,
+            "score": float(best_score),
+            "metrics": best_result,
+        }
 
-    def _train_development_and_evaluate_test(self, benchmark_filename, hyperparameters):
+    def _train_development_and_evaluate_test(self, benchmark_filename, hyperparameters, epochs):
         """
         Trains the model on the development data and evaluates it on the test data.
 
         Args:
             benchmark_filename (list[str]): _description_
             hyperparameters (dict[str, Any]): _description_
+            epochs (int): _description_
 
         Returns:
             _type_: _description_
         """
         config = self._build_config({
             "benchmark_filename": benchmark_filename,
+            "epochs": epochs,
             **hyperparameters,
         })
         
@@ -278,21 +307,20 @@ class NeuMFEvaluator:
         
         _, trainer = self._create_model_and_trainer(config, train_data)
 
-        LOGGER.info("Final training on all development interactions")
+        LOGGER.info(
+            "Final training on all development interactions | %d epoch(s)",
+            epochs,
+        )
         
         trainer.fit(
             train_data,
             valid_data=None,
-            saved=False,
+            saved=True,
             show_progress=False,
             verbose=False,
         )
         
-        return trainer.evaluate(
-            test_data,
-            load_best_model=False,
-            show_progress=False,
-        )
+        return self._evaluate_saved_model(trainer, test_data)
 
     def _build_config(self, overrides = None) -> Config:
         """
@@ -343,6 +371,25 @@ class NeuMFEvaluator:
         
         return model, trainer
 
+    @staticmethod
+    def _evaluate_saved_model(trainer, test_data):
+        """
+        Evaluates the saved model on the test data.
+
+        Args:
+            trainer: RecBole trainer.
+            test_data: Test data prepared by RecBole.
+
+        Returns:
+            dict[str, Any]: Test results.
+        """
+        with patch.object(torch, "load", partial(torch.load, weights_only=False)):
+            return trainer.evaluate(
+                test_data,
+                load_best_model=True,
+                show_progress=False,
+            )
+
     def _load_hyperparameter_candidates(self) -> list[dict[str, Any]]:
         """
         Loads the hyperparameter candidates from the search configuration file.
@@ -369,6 +416,7 @@ class NeuMFEvaluator:
             dict[str, Any]: List of results from each fold
         """
         scores = np.asarray([result["score"] for result in fold_results], dtype=float)
+        epochs = np.asarray([result["epoch"] for result in fold_results], dtype=int)
         metric_names = list(fold_results[0]["metrics"])
         
         mean_metrics = {}
@@ -384,6 +432,7 @@ class NeuMFEvaluator:
             std_metrics[metric_name] = float(np.std(values))
         
         return {
+            "median_epoch": int(np.median(epochs)),
             "mean_score": float(np.mean(scores)),
             "std_score": float(np.std(scores)),
             "mean_metrics": mean_metrics,

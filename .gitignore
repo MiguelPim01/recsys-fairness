@@ -17,3 +17,6 @@ recbole_testes/
 
 # TensorBoard logs
 log_tensorboard/
+
+# Models
+saved/
