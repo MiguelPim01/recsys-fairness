@@ -61,7 +61,7 @@ Documento contendo todas as decisões metodológicas utilizadas no código.
     - Interações com comércios ou usuários sem metadados foram descartadas.
     - Usuários e comércios que possuem metadados mas não possuem interações foram descartados.
 
-> Observações: No Yelp dataset um mesmo usuário avaliou um mesmo comércio mais de uma vez em 212.788 interações (aproximadamente 3,15%). Total de interações é 6.990.247.
+> Observações: No Yelp dataset um mesmo usuário avaliou um mesmo comércio mais de uma vez em 212.788 interações (aproximadamente 3,15%). Total de interações é 6.990.247. Por isso, na transformação dos dados foram mantidas apenas as interações mais recentes de um mesmo par usuário-item.
 
 ---
 
