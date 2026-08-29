@@ -36,18 +36,24 @@ You can run the script with three flags:
 
 1. Run the script:
 ```bash
-./scripts/evaluate_models.sh --cross_validation --hyperparameter-search --folds N
+./scripts/evaluate_models.sh --model <MODEL> --cross_validation --hyperparameter-search --folds N
 ```
+
+Possible flags:
+- `--model`: Choose which model do you want to run. Defaults to `neumf`.
+- `--cross_validation`: Run user-stratified cross-validation. 
+- `--hyperparameter-search`: Search configurations from the model search YAML.
+- `--folds`: Number of cross-validation folds. Defaults to `5`.
 
 ## Architecture
 
 ```mermaid
-
 flowchart LR
     A["Raw Datasets"] --> B["Atomic Data"]
     B --> C["Filtered Data"]
 
     C --> D["Training and Evaluation"]
     D --> E["Results"]
-
 ```
+
+All methodological decisions are documented in [method_documentation](docs/methodological_notes.md).
