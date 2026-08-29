@@ -7,17 +7,18 @@ from collections import defaultdict
 from pathlib import Path
 
 
-class LastFMCrossValidationSplitter:
+class ICrossValidationSplitter:
     """Create reusable per-user folds and an isolated final test set."""
 
-    MANIFEST_FILENAME = "lastfm.cv_manifest.json"
+    DATASET_NAME = None
+    MANIFEST_FILENAME = None
 
     def __init__(self, dataset_dir, n_splits = 5, seed = 42, test_ratio = 0.2):
         self.dataset_dir = Path(dataset_dir)
         self.n_splits = n_splits
         self.seed = seed
         self.test_ratio = test_ratio
-        self.interaction_path = self.dataset_dir / "lastfm.inter"
+        self.interaction_path = self.dataset_dir / f"{self.DATASET_NAME}.inter"
         self.manifest_path = self.dataset_dir / self.MANIFEST_FILENAME
 
     def prepare(self):
@@ -34,9 +35,9 @@ class LastFMCrossValidationSplitter:
         header, interactions_by_user = self._read_interactions()
         development_rows, test_rows, validation_fold_by_row = self._split_by_user(interactions_by_user)
 
-        self._write_atomic_file(self.dataset_dir / "lastfm.development.inter", header, development_rows)
-        self._write_atomic_file(self.dataset_dir / "lastfm.test.inter", header, test_rows)
-        self._write_atomic_file(self.dataset_dir / "lastfm.empty.inter", header, [])
+        self._write_atomic_file(self.dataset_dir / f"{self.DATASET_NAME}.development.inter", header, development_rows)
+        self._write_atomic_file(self.dataset_dir / f"{self.DATASET_NAME}.test.inter", header, test_rows)
+        self._write_atomic_file(self.dataset_dir / f"{self.DATASET_NAME}.empty.inter", header, [])
 
         for fold in range(self.n_splits):
             train_rows = [
@@ -51,12 +52,12 @@ class LastFMCrossValidationSplitter:
             ]
             
             self._write_atomic_file(
-                self.dataset_dir / f"lastfm.fold{fold}_train.inter",
+                self.dataset_dir / f"{self.DATASET_NAME}.fold{fold}_train.inter",
                 header,
                 train_rows,
             )
             self._write_atomic_file(
-                self.dataset_dir / f"lastfm.fold{fold}_valid.inter",
+                self.dataset_dir / f"{self.DATASET_NAME}.fold{fold}_valid.inter",
                 header,
                 valid_rows,
             )
@@ -142,15 +143,15 @@ class LastFMCrossValidationSplitter:
 
     def _expected_files(self):
         files = [
-            self.dataset_dir / "lastfm.development.inter",
-            self.dataset_dir / "lastfm.test.inter",
-            self.dataset_dir / "lastfm.empty.inter",
+            self.dataset_dir / f"{self.DATASET_NAME}.development.inter",
+            self.dataset_dir / f"{self.DATASET_NAME}.test.inter",
+            self.dataset_dir / f"{self.DATASET_NAME}.empty.inter",
         ]
         
         for fold in range(self.n_splits):
             files.extend([
-                self.dataset_dir / f"lastfm.fold{fold}_train.inter",
-                self.dataset_dir / f"lastfm.fold{fold}_valid.inter",
+                self.dataset_dir / f"{self.DATASET_NAME}.fold{fold}_train.inter",
+                self.dataset_dir / f"{self.DATASET_NAME}.fold{fold}_valid.inter",
             ])
         
         return files
