@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 
 from src.evaluators.neumf_evaluator import NeuMFEvaluator
+from src.sampler.lastfm_cross_val import LastFMCrossValidationSplitter
 from src.sampler.lastfm_sampler import LastFMSampler
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -55,6 +56,7 @@ def main():
         dataset_dir=dataset_dir,
         config_path=config_path,
         hp_search_config_path=hyperparameter_config_path,
+        cross_validation_splitter=LastFMCrossValidationSplitter,
     )
     
     evaluator.evaluate(

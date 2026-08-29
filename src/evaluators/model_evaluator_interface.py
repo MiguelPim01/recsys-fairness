@@ -14,8 +14,6 @@ from recbole.data import create_dataset, data_preparation
 from recbole.utils import get_model, get_trainer, init_seed
 from tqdm.auto import tqdm
 
-from sampler.lastfm_cross_val import LastFMCrossValidationSplitter
-
 # ----- Config
 LOGGER = logging.getLogger("recsys_fairness.evaluation")
 
@@ -27,10 +25,11 @@ class IModelEvaluator:
     MODEL_NAME = None
     HYPERPARAMETER_LABELS = {}
 
-    def __init__(self, dataset_dir, config_path, hp_search_config_path):
+    def __init__(self, dataset_dir, config_path, hp_search_config_path, cross_validation_splitter = None):
         self.dataset_dir = Path(dataset_dir)
         self.config_path = Path(config_path)
         self.hp_search_config_path = Path(hp_search_config_path)
+        self.cross_validation_splitter = cross_validation_splitter
 
     def evaluate(self, cross_validation = False, hyperparameter_search = False, n_splits = 5):
         """
@@ -52,7 +51,7 @@ class IModelEvaluator:
 
         base_config = self._build_config()
         
-        splitter = LastFMCrossValidationSplitter(
+        splitter = self.cross_validation_splitter(
             dataset_dir=self.dataset_dir,
             n_splits=n_splits,
             seed=base_config["seed"],
