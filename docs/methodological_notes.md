@@ -86,7 +86,7 @@ Documento contendo todas as decisões metodológicas utilizadas no código.
 
 ## Treinamento e Avaliação
 
-Os dados foram divididos da seguinte maneira:
+Toda a pipeline de divisão de dados, validação cruzada, busca de hiperparâmetros e resultados pode ser resumida pelo seguinte fluxograma:
 
 ```mermaid
 graph LR
