@@ -52,15 +52,26 @@ class GroupFairnessAnalyzer:
         activity_counts = self._development_activity(development_data)
         raw_profiles = self._read_profiles()
         evaluations = self._evaluate_users(trainer, test_data, topk)
-        profiles = [
-            UserProfile(
-                user_id=evaluation.user_id,
-                gender=raw_profiles.get(evaluation.user_id, {}).get("gender", ""),
-                age=raw_profiles.get(evaluation.user_id, {}).get("age"),
-                development_interactions=activity_counts[evaluation.user_id],
+        profiles = []
+        for evaluation in evaluations:
+            try:
+                raw_profile = raw_profiles[evaluation.user_id]
+            except KeyError as error:
+                raise ValueError(
+                    f"Missing profile for test user {evaluation.user_id}"
+                ) from error
+
+            profiles.append(
+                UserProfile(
+                    user_id=evaluation.user_id,
+                    development_interactions=activity_counts[evaluation.user_id],
+                    gender=raw_profile.get("gender", ""),
+                    age=raw_profile.get("age"),
+                    is_active=raw_profile.get("is_active"),
+                    friend_count=raw_profile.get("friend_count"),
+                    tenure_years=raw_profile.get("tenure_years"),
+                )
             )
-            for evaluation in evaluations
-        ]
 
         if any(profile.development_interactions <= 0 for profile in profiles):
             raise ValueError("Every test user must have development interactions")
@@ -69,10 +80,16 @@ class GroupFairnessAnalyzer:
         if not 0.0 < activity_fraction < 1.0:
             raise ValueError("fairness.activity_fraction must be between 0 and 1")
 
-        partitions = metadata_partitions(profiles, activity_fraction)
+        dataset = str(self.config["dataset"])
+        partitions = metadata_partitions(
+            profiles,
+            activity_fraction,
+            dataset,
+        )
         partitions.update(
             latent_partitions(
                 profiles=profiles,
+                dataset=dataset,
                 seed=int(self.config["seed"]),
                 k_min=int(self.settings["cluster_k_min"]),
                 k_max=int(self.settings["cluster_k_max"]),
@@ -200,20 +217,69 @@ class GroupFairnessAnalyzer:
         profile_path = self.dataset_dir / f"{self.config['dataset']}.user"
         with profile_path.open(encoding="utf-8", newline="") as input_file:
             reader = csv.DictReader(input_file, delimiter="\t")
-            required_fields = {"user_id:token", "gender:token", "age:float"}
-            if reader.fieldnames is None or not required_fields.issubset(
-                reader.fieldnames
-            ):
-                raise ValueError(f"Missing LastFM profile fields in {profile_path}")
+            dataset = str(self.config["dataset"]).casefold()
+            if dataset == "lastfm":
+                return self._read_lastfm_profiles(reader, profile_path)
+            if dataset == "yelp":
+                return self._read_yelp_profiles(reader, profile_path)
 
-            profiles = {}
-            for row in reader:
-                user_id = row["user_id:token"]
-                raw_age = row["age:float"].strip()
-                profiles[user_id] = {
-                    "gender": row["gender:token"],
-                    "age": float(raw_age) if raw_age else None,
-                }
+        raise ValueError(f"Unsupported fairness dataset: {self.config['dataset']}")
+
+    @staticmethod
+    def _read_lastfm_profiles(reader, profile_path):
+        required_fields = {"user_id:token", "gender:token", "age:float"}
+        if reader.fieldnames is None or not required_fields.issubset(
+            reader.fieldnames
+        ):
+            raise ValueError(f"Missing LastFM profile fields in {profile_path}")
+
+        profiles = {}
+        for row in reader:
+            user_id = row["user_id:token"]
+            raw_age = row["age:float"].strip()
+            profiles[user_id] = {
+                "gender": row["gender:token"],
+                "age": float(raw_age) if raw_age else None,
+            }
+        return profiles
+
+    @staticmethod
+    def _read_yelp_profiles(reader, profile_path):
+        required_fields = {
+            "user_id:token",
+            "is_active:token",
+            "friend_count:float",
+            "tenure_years:float",
+        }
+        if reader.fieldnames is None or not required_fields.issubset(
+            reader.fieldnames
+        ):
+            raise ValueError(f"Missing Yelp profile fields in {profile_path}")
+
+        profiles = {}
+        for row in reader:
+            user_id = row["user_id:token"]
+            raw_is_active = row["is_active:token"].strip().casefold()
+            if raw_is_active not in {"true", "false"}:
+                raise ValueError(
+                    f"Invalid is_active value for Yelp user {user_id}"
+                )
+
+            friend_count = float(row["friend_count:float"])
+            tenure_years = float(row["tenure_years:float"])
+            if (
+                not math.isfinite(friend_count)
+                or friend_count < 0
+                or not math.isfinite(tenure_years)
+                or tenure_years < 0
+            ):
+                raise ValueError(f"Invalid Yelp profile values for user {user_id}")
+
+            profiles[user_id] = {
+                "is_active": raw_is_active == "true",
+                "friend_count": friend_count,
+                "tenure_years": tenure_years,
+            }
         return profiles
 
     @staticmethod

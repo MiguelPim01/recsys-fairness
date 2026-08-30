@@ -6,6 +6,7 @@ repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repository_root"
 
 model="neumf"
+dataset="all"
 evaluation_arguments=()
 
 show_help() {
@@ -16,6 +17,7 @@ Train and evaluate recommendation models.
 
 Options:
   --model MODEL              Model to evaluate (default: neumf).
+  --dataset DATASET          Dataset to evaluate: all, lastfm, or yelp (default: all).
   --cross-validation         Run user-stratified cross-validation.
   --hyperparameter-search    Search configurations from the model search YAML.
   --folds N                  Number of cross-validation folds (default: 5).
@@ -23,6 +25,7 @@ Options:
 
 Examples:
   scripts/evaluate_models.sh
+  scripts/evaluate_models.sh --dataset yelp
   scripts/evaluate_models.sh --cross-validation
   scripts/evaluate_models.sh --hyperparameter-search
   scripts/evaluate_models.sh --cross-validation --hyperparameter-search
@@ -38,6 +41,22 @@ while (( $# > 0 )); do
                 exit 2
             fi
             model="$2"
+            shift 2
+            ;;
+        --dataset)
+            if (( $# < 2 )); then
+                echo "Missing value for --dataset." >&2
+                exit 2
+            fi
+            case "$2" in
+                all | lastfm | yelp)
+                    dataset="$2"
+                    ;;
+                *)
+                    echo "Unsupported dataset: $2. Available datasets: all, lastfm, yelp." >&2
+                    exit 2
+                    ;;
+            esac
             shift 2
             ;;
         --cross-validation | --hyperparameter-search)
@@ -77,6 +96,7 @@ fi
 case "$model" in
     neumf)
         exec "${python_command[@]}" -m src.scripts.evaluation.eval_neumf \
+            --dataset "$dataset" \
             "${evaluation_arguments[@]}"
         ;;
     *)

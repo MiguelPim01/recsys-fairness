@@ -24,11 +24,22 @@ import numpy as np
 from matplotlib.patches import Patch
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-GROUPING_ORDER = ("activity", "age", "gender", "kmeans", "agglomerative")
+GROUPING_ORDER_BY_DATASET = {
+    "lastfm": ("activity", "age", "gender", "kmeans", "agglomerative"),
+    "yelp": (
+        "activity",
+        "friend_count",
+        "tenure",
+        "kmeans",
+        "agglomerative",
+    ),
+}
 GROUPING_LABELS = {
     "activity": "Activity",
     "age": "Age",
     "gender": "Gender",
+    "friend_count": "Friends",
+    "tenure": "Tenure",
     "kmeans": "K-Means",
     "agglomerative": "Agglomerative",
 }
@@ -36,6 +47,8 @@ GROUPING_COLORS = {
     "activity": "#ff7f0e",
     "age": "#9467bd",
     "gender": "#17becf",
+    "friend_count": "#8c564b",
+    "tenure": "#e377c2",
     "kmeans": "#1f77b4",
     "agglomerative": "#2ca02c",
 }
@@ -81,6 +94,7 @@ class ModelResult:
 @dataclass(frozen=True)
 class DatasetResults:
     dataset: str
+    grouping_order: tuple[str, ...]
     models: tuple[ModelResult, ...]
 
 
@@ -132,6 +146,7 @@ def _load_results(path: Path) -> DatasetResults:
         raise ValueError("Results JSON must contain a non-empty 'results' object")
 
     dataset_name = None
+    grouping_order = None
     models = []
     for model_name in sorted(raw_models, key=_model_sort_key):
         raw_model = raw_models[model_name]
@@ -144,13 +159,21 @@ def _load_results(path: Path) -> DatasetResults:
             raise ValueError(f"Model {model_name} has no evaluation.dataset")
         if dataset_name is None:
             dataset_name = current_dataset
+            try:
+                grouping_order = GROUPING_ORDER_BY_DATASET[
+                    current_dataset.casefold()
+                ]
+            except KeyError as error:
+                raise ValueError(
+                    f"Unsupported results dataset: {current_dataset}"
+                ) from error
         elif current_dataset != dataset_name:
             raise ValueError("All model entries must belong to the same dataset")
 
         raw_groupings = raw_model.get("groupings")
         if not isinstance(raw_groupings, dict):
             raise ValueError(f"Model {model_name} has no groupings object")
-        missing = set(GROUPING_ORDER) - set(raw_groupings)
+        missing = set(grouping_order) - set(raw_groupings)
         if missing:
             raise ValueError(
                 f"Model {model_name} is missing groupings: {', '.join(sorted(missing))}"
@@ -158,12 +181,12 @@ def _load_results(path: Path) -> DatasetResults:
 
         groupings = {
             name: _parse_grouping(model_name, name, raw_groupings[name])
-            for name in GROUPING_ORDER
+            for name in grouping_order
         }
         rmse = _model_rmse(model_name, groupings)
         models.append(ModelResult(model_name, rmse, groupings))
 
-    return DatasetResults(dataset_name, tuple(models))
+    return DatasetResults(dataset_name, grouping_order, tuple(models))
 
 
 def _parse_grouping(
@@ -226,7 +249,7 @@ def _model_rmse(
 def _write_table(results: DatasetResults, path: Path) -> None:
     rows = []
     for model in results.models:
-        for grouping_name in GROUPING_ORDER:
+        for grouping_name in results.grouping_order:
             rows.append(
                 {
                     "model": model.name,
@@ -258,11 +281,15 @@ def _group_unfairness_figure(results: DatasetResults):
         )
         for column, model in enumerate(results.models):
             axis = axes[0, column]
-            values = [model.groupings[name].rgrp for name in GROUPING_ORDER]
+            values = [
+                model.groupings[name].rgrp for name in results.grouping_order
+            ]
             axis.bar(
-                np.arange(len(GROUPING_ORDER)),
+                np.arange(len(results.grouping_order)),
                 values,
-                color=[GROUPING_COLORS[name] for name in GROUPING_ORDER],
+                color=[
+                    GROUPING_COLORS[name] for name in results.grouping_order
+                ],
                 width=0.72,
             )
             axis.set_title(model.name)
@@ -274,12 +301,12 @@ def _group_unfairness_figure(results: DatasetResults):
 
         handles = [
             Patch(color=GROUPING_COLORS[name], label=GROUPING_LABELS[name])
-            for name in GROUPING_ORDER
+            for name in results.grouping_order
         ]
         figure.legend(
             handles=handles,
             loc="lower center",
-            ncol=len(GROUPING_ORDER),
+            ncol=len(results.grouping_order),
             frameon=True,
         )
         figure.subplots_adjust(bottom=0.22, left=0.1, right=0.98, top=0.9, wspace=0.18)
@@ -288,7 +315,7 @@ def _group_unfairness_figure(results: DatasetResults):
 
 def _group_loss_figure(results: DatasetResults):
     row_count = len(results.models)
-    column_count = len(GROUPING_ORDER)
+    column_count = len(results.grouping_order)
     with plt.rc_context(PLOT_STYLE):
         figure, axes = plt.subplots(
             row_count,
@@ -298,7 +325,7 @@ def _group_loss_figure(results: DatasetResults):
             squeeze=False,
         )
         for row, model in enumerate(results.models):
-            for column, grouping_name in enumerate(GROUPING_ORDER):
+            for column, grouping_name in enumerate(results.grouping_order):
                 axis = axes[row, column]
                 grouping = model.groupings[grouping_name]
                 positions = np.arange(len(grouping.groups))
@@ -328,7 +355,7 @@ def _group_loss_figure(results: DatasetResults):
 
 def _boxplot_figure(results: DatasetResults):
     distributions = [
-        [model.groupings[name].rgrp for name in GROUPING_ORDER]
+        [model.groupings[name].rgrp for name in results.grouping_order]
         for model in results.models
     ]
     with plt.rc_context(PLOT_STYLE):
@@ -428,6 +455,18 @@ def _group_sort_key(grouping_name: str, group_name: str):
             "unknown": 7,
         },
         "gender": {"male": 0, "female": 1, "unknown": 2},
+        "friend_count": {
+            "no_friends": 0,
+            "1_10": 1,
+            "11_100": 2,
+            "101_plus": 3,
+        },
+        "tenure": {
+            "under_1": 0,
+            "1_3": 1,
+            "3_5": 2,
+            "5_plus": 3,
+        },
     }
     if grouping_name in predefined:
         order = predefined[grouping_name]
@@ -453,6 +492,14 @@ def _group_label(group_name: str) -> str:
         "45_49": "45–49",
         "50_55": "50–55",
         "over_55": ">55",
+        "no_friends": "None",
+        "1_10": "1–10",
+        "11_100": "11–100",
+        "101_plus": "101+",
+        "under_1": "<1",
+        "1_3": "1–3",
+        "3_5": "3–5",
+        "5_plus": "5+",
     }
     if group_name in labels:
         return labels[group_name]

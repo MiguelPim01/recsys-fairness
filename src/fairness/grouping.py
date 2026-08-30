@@ -11,9 +11,12 @@ from sklearn.preprocessing import StandardScaler
 @dataclass(frozen=True)
 class UserProfile:
     user_id: str
-    gender: str
-    age: float | None
     development_interactions: int
+    gender: str = ""
+    age: float | None = None
+    is_active: bool | None = None
+    friend_count: float | None = None
+    tenure_years: float | None = None
 
 
 @dataclass(frozen=True)
@@ -23,8 +26,15 @@ class Partition:
 
 
 def metadata_partitions(
-    profiles: list[UserProfile], activity_fraction: float
+    profiles: list[UserProfile],
+    activity_fraction: float,
+    dataset: str,
 ) -> dict[str, Partition]:
+    if dataset.casefold() == "yelp":
+        return _yelp_metadata_partitions(profiles)
+    if dataset.casefold() != "lastfm":
+        raise ValueError(f"Unsupported grouping dataset: {dataset}")
+
     gender = {
         profile.user_id: _gender_group(profile.gender) for profile in profiles
     }
@@ -59,14 +69,54 @@ def metadata_partitions(
     }
 
 
+def _yelp_metadata_partitions(
+    profiles: list[UserProfile],
+) -> dict[str, Partition]:
+    for profile in profiles:
+        if (
+            profile.is_active is None
+            or profile.friend_count is None
+            or profile.tenure_years is None
+        ):
+            raise ValueError(f"Incomplete Yelp profile for user {profile.user_id}")
+
+    activity = {
+        profile.user_id: "active" if profile.is_active else "inactive"
+        for profile in profiles
+    }
+    friend_count = {
+        profile.user_id: _friend_count_group(profile.friend_count)
+        for profile in profiles
+    }
+    tenure = {
+        profile.user_id: _tenure_group(profile.tenure_years)
+        for profile in profiles
+    }
+
+    return {
+        "activity": Partition(
+            activity,
+            {
+                "type": "metadata",
+                "active_users": sum(
+                    1 for profile in profiles if profile.is_active
+                ),
+            },
+        ),
+        "friend_count": Partition(friend_count, {"type": "metadata"}),
+        "tenure": Partition(tenure, {"type": "metadata"}),
+    }
+
+
 def latent_partitions(
     profiles: list[UserProfile],
+    dataset: str,
     seed: int,
     k_min: int,
     k_max: int,
     kmeans_n_init: int,
 ) -> dict[str, Partition]:
-    matrix = _feature_matrix(profiles)
+    matrix = _feature_matrix(profiles, dataset)
     user_ids = [profile.user_id for profile in profiles]
     candidate_ks = range(k_min, min(k_max, len(profiles) - 1) + 1)
 
@@ -122,7 +172,15 @@ def latent_partitions(
     return partitions
 
 
-def _feature_matrix(profiles: list[UserProfile]) -> np.ndarray:
+def _feature_matrix(
+    profiles: list[UserProfile],
+    dataset: str,
+) -> np.ndarray:
+    if dataset.casefold() == "yelp":
+        return _yelp_feature_matrix(profiles)
+    if dataset.casefold() != "lastfm":
+        raise ValueError(f"Unsupported clustering dataset: {dataset}")
+
     known_ages = [profile.age for profile in profiles if profile.age is not None]
     median_age = float(np.median(known_ages)) if known_ages else 0.0
 
@@ -149,6 +207,28 @@ def _feature_matrix(profiles: list[UserProfile]) -> np.ndarray:
         ]
     )
     return np.concatenate((numeric, missing_age, gender), axis=1)
+
+
+def _yelp_feature_matrix(profiles: list[UserProfile]) -> np.ndarray:
+    rows = []
+    for profile in profiles:
+        if (
+            profile.is_active is None
+            or profile.friend_count is None
+            or profile.tenure_years is None
+        ):
+            raise ValueError(f"Incomplete Yelp profile for user {profile.user_id}")
+
+        rows.append(
+            [
+                float(profile.is_active),
+                math.log1p(profile.friend_count),
+                profile.tenure_years,
+                math.log1p(profile.development_interactions),
+            ]
+        )
+
+    return StandardScaler().fit_transform(np.asarray(rows, dtype=float))
 
 
 def _canonical_labels(
@@ -193,3 +273,23 @@ def _age_group(age: float | None) -> str:
     if age <= 55:
         return "50_55"
     return "over_55"
+
+
+def _friend_count_group(friend_count: float) -> str:
+    if friend_count == 0:
+        return "no_friends"
+    if friend_count <= 10:
+        return "1_10"
+    if friend_count <= 100:
+        return "11_100"
+    return "101_plus"
+
+
+def _tenure_group(tenure_years: float) -> str:
+    if tenure_years < 1:
+        return "under_1"
+    if tenure_years < 3:
+        return "1_3"
+    if tenure_years < 5:
+        return "3_5"
+    return "5_plus"

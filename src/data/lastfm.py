@@ -26,13 +26,35 @@ class LastFMTransformDataset:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         statistics = defaultdict(int)
+        for name in (
+            "raw_user_profiles",
+            "complete_user_profiles",
+            "dropped_incomplete_user_profiles",
+            "raw_interactions",
+            "dropped_invalid_user_rows",
+            "dropped_missing_profile_user_rows",
+            "dropped_incomplete_profile_user_rows",
+            "dropped_nonpositive_play_rows",
+            "dropped_missing_artist_rows",
+            "aggregated_duplicate_rows",
+            "written_interactions",
+        ):
+            statistics[name] = 0
 
         # Writing interaction matrix
-        profile_users = self._read_profile_users()
-        interaction_users, items = self._transform_interactions(profile_users, statistics)
+        profile_users, complete_profile_users = self._read_profile_users(statistics)
+        interaction_users, items = self._transform_interactions(
+            profile_users,
+            complete_profile_users,
+            statistics,
+        )
 
         # Writing user and item profiles
-        self._transform_users(interaction_users, len(profile_users), statistics)
+        self._transform_users(
+            interaction_users,
+            statistics["raw_user_profiles"],
+            statistics,
+        )
         self._write_items(items)
 
         statistics["users"] = len(interaction_users)
@@ -40,12 +62,18 @@ class LastFMTransformDataset:
 
         return dict(statistics)
 
-    def _transform_interactions(self, profile_users, statistics):
+    def _transform_interactions(
+        self,
+        profile_users,
+        complete_profile_users,
+        statistics,
+    ):
         """
         Main logic for writing lastfm.inter file.
 
         Args:
-            profile_users: Set of user IDs from the profile data.
+            profile_users: Set of all user IDs from the profile data.
+            complete_profile_users: Set of user IDs with complete metadata.
             statistics: Statistics dictionary.
 
         Returns:
@@ -90,6 +118,9 @@ class LastFMTransformDataset:
                 if user_id not in profile_users:
                     statistics["dropped_missing_profile_user_rows"] += 1
                     continue
+                if user_id not in complete_profile_users:
+                    statistics["dropped_incomplete_profile_user_rows"] += 1
+                    continue
 
                 play_count = int(raw_play_count)
                 if play_count <= 0:
@@ -130,29 +161,53 @@ class LastFMTransformDataset:
 
         return users, items
 
-    def _read_profile_users(self):
+    def _read_profile_users(self, statistics):
         """
         Reads all users so we don't compute unnecessary interactions later on.
 
         Returns:
-            users: Set of user IDs from the profile data.
+            users: Set of all user IDs from the profile data.
+            complete_users: Set of user IDs with complete metadata.
         """
         input_path = self.raw_dir / self.PROFILES_FILENAME
         users = set()
+        complete_users = set()
 
         with input_path.open(encoding="utf-8", newline="") as input_file:
             reader = csv.reader(input_file, delimiter="\t", quoting=csv.QUOTE_NONE)
 
             for row_number, row in enumerate(reader, start=1):
+                statistics["raw_user_profiles"] += 1
+
                 if len(row) != 5:
                     raise ValueError(
                         f"Expected 5 columns at profile row {row_number}"
                     )
 
-                user_id = row[0].strip()
+                user_id, gender, raw_age, country, signup_date = map(str.strip, row)
+
+                if not user_id:
+                    statistics["dropped_incomplete_user_profiles"] += 1
+                    continue
+                if user_id in users:
+                    raise ValueError(f"Duplicate user profile for {user_id}")
+
                 users.add(user_id)
 
-        return users
+                if not self._has_complete_metadata(
+                    user_id,
+                    gender,
+                    raw_age,
+                    country,
+                    signup_date,
+                ):
+                    statistics["dropped_incomplete_user_profiles"] += 1
+                    continue
+
+                complete_users.add(user_id)
+                statistics["complete_user_profiles"] += 1
+
+        return users, complete_users
 
     def _transform_users(self, interaction_users, total_users, statistics):
         """
@@ -200,8 +255,14 @@ class LastFMTransformDataset:
                     raise ValueError(f"Duplicate user profile for {user_id}")
 
                 age = self._valid_age(raw_age)
-                if raw_age and not age:
-                    statistics["invalid_ages"] += 1
+                if not self._has_complete_metadata(
+                    user_id,
+                    gender,
+                    raw_age,
+                    country,
+                    signup_date,
+                ):
+                    raise ValueError(f"Incomplete metadata for user {user_id}")
 
                 # Adding user data
                 writer.writerow([
@@ -292,3 +353,20 @@ class LastFMTransformDataset:
         numeric_age = int(raw_age)
 
         return str(numeric_age) if numeric_age > 0 else ""
+
+    @classmethod
+    def _has_complete_metadata(
+        cls,
+        user_id: str,
+        gender: str,
+        raw_age: str,
+        country: str,
+        signup_date: str,
+    ) -> bool:
+        return bool(
+            user_id
+            and gender
+            and cls._valid_age(raw_age)
+            and country
+            and signup_date
+        )
