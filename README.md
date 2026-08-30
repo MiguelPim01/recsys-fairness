@@ -32,16 +32,31 @@ You can run the script with three flags:
    - `lastfm`: Run for LastFM-360K dataset only.
    - `yelp`: Run for Yelp dataset only.
 
+### Sampling datasets
+
+After transforming the raw files, create the reproducible 1000-user and
+1000-item samples:
+
+```bash
+./scripts/sample_datasets.sh <dataset>
+```
+
+The command accepts `all` (default), `lastfm`, or `yelp`. It selects the 1000
+items with the most interactions and, using seed 42, samples 1000 users with at
+least six interactions among those items. Sampling statistics are printed in
+the terminal and the atomic files are written to `data/sample/<dataset>`.
+
 ### Running models
 
 1. Run the script:
 ```bash
-./scripts/evaluate_models.sh --model <MODEL> --cross_validation --hyperparameter-search --folds N
+./scripts/evaluate_models.sh --model <MODEL> --dataset <DATASET> --cross-validation --hyperparameter-search --folds N
 ```
 
 Possible flags:
 - `--model`: Choose which model do you want to run. Defaults to `neumf`.
-- `--cross_validation`: Run user-stratified cross-validation. 
+- `--dataset`: Choose `all`, `lastfm`, or `yelp`. Defaults to `all`.
+- `--cross-validation`: Run user-stratified cross-validation.
 - `--hyperparameter-search`: Search configurations from the model search YAML.
 - `--folds`: Number of cross-validation folds. Defaults to `5`.
 
@@ -56,6 +71,7 @@ The evaluation also regenerates the publication table data and PDF figures under
 
 ```bash
 python -m src.utils.results --dataset lastfm
+python -m src.utils.results --dataset yelp
 ```
 
 ## Architecture
