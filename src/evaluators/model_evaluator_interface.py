@@ -14,6 +14,8 @@ from recbole.data import create_dataset, data_preparation
 from recbole.utils import get_model, get_trainer, init_seed
 from tqdm.auto import tqdm
 
+from src.fairness import GroupFairnessAnalyzer
+
 # ----- Config
 LOGGER = logging.getLogger("recsys_fairness.evaluation")
 
@@ -135,7 +137,7 @@ class IModelEvaluator:
         )
 
         # 3. Final evaluation: trains model with development data and evaluates on test data.
-        test_result = self._train_development_and_evaluate_test(
+        test_result, analysis, results_path = self._train_development_and_evaluate_test(
             splitter.final_benchmark(),
             best_candidate["hyperparameters"],
             best_candidate["median_epoch"],
@@ -150,9 +152,12 @@ class IModelEvaluator:
             "validation": best_candidate,
             "candidates": candidate_results,
             "test_result": test_result,
+            "analysis": analysis,
         }
         
         LOGGER.info("Test | %s", self._format_metrics(test_result))
+        if results_path is not None:
+            LOGGER.info("Fairness results | %s", results_path)
         
         return results
 
@@ -199,6 +204,13 @@ class IModelEvaluator:
         )
         
         test_result = self._evaluate_saved_model(trainer, test_data)
+        analysis, results_path = self._analyze_final_test(
+            trainer=trainer,
+            config=config,
+            test_data=test_data,
+            development_data=(train_data, valid_data),
+            test_result=test_result,
+        )
 
         validation = {
             "hyperparameters": {},
@@ -224,10 +236,13 @@ class IModelEvaluator:
             "validation": validation,
             "candidates": [validation],
             "test_result": test_result,
+            "analysis": analysis,
         }
         
         LOGGER.info("Validation | %s", self._format_metrics(best_valid_result))
         LOGGER.info("Test | %s", self._format_metrics(test_result))
+        if results_path is not None:
+            LOGGER.info("Fairness results | %s", results_path)
         
         return results
 
@@ -301,7 +316,7 @@ class IModelEvaluator:
         init_seed(config["seed"], config["reproducibility"])
         
         dataset = create_dataset(config)
-        train_data, _, test_data = data_preparation(config, dataset)
+        train_data, valid_data, test_data = data_preparation(config, dataset)
         
         _, trainer = self._create_model_and_trainer(config, train_data)
 
@@ -318,7 +333,15 @@ class IModelEvaluator:
             verbose=False,
         )
         
-        return self._evaluate_saved_model(trainer, test_data)
+        test_result = self._evaluate_saved_model(trainer, test_data)
+        analysis, results_path = self._analyze_final_test(
+            trainer=trainer,
+            config=config,
+            test_data=test_data,
+            development_data=(train_data, valid_data),
+            test_result=test_result,
+        )
+        return test_result, analysis, results_path
 
     def _build_config(self, overrides = None) -> Config:
         """
@@ -386,6 +409,36 @@ class IModelEvaluator:
                 load_best_model=True,
                 show_progress=False,
             )
+
+    def _analyze_final_test(
+        self,
+        trainer,
+        config,
+        test_data,
+        development_data,
+        test_result,
+    ):
+        """Run detailed group-fairness analysis only for the final test."""
+        settings = config["fairness"]
+        if not settings or not settings.get("enabled", False):
+            return None, None
+
+        analyzer = GroupFairnessAnalyzer(
+            dataset_dir=self.dataset_dir,
+            algorithm=self.MODEL_NAME,
+            config=config,
+        )
+        analysis, results_path = analyzer.analyze(
+            trainer=trainer,
+            test_data=test_data,
+            development_data=development_data,
+            recbole_metrics=test_result,
+        )
+        from src.utils.results import generate_result_artifacts
+
+        artifacts = generate_result_artifacts(results_path)
+        LOGGER.info("Result artifacts | %s", next(iter(artifacts.values())).parent)
+        return analysis, results_path
 
     def _load_hyperparameter_candidates(self) -> list[dict[str, Any]]:
         """
