@@ -45,6 +45,19 @@ Possible flags:
 - `--hyperparameter-search`: Search configurations from the model search YAML.
 - `--folds`: Number of cross-validation folds. Defaults to `5`.
 
+After the final test evaluation, the command also calculates the configured user-group
+metrics and updates `results/results_<dataset>.json`. Fairness is evaluated only on the
+final holdout and is not used during hyperparameter selection. The methodology and the
+latest execution checks are documented in
+[`docs/evaluation/group_fairness.md`](docs/evaluation/group_fairness.md).
+
+The evaluation also regenerates the publication table data and PDF figures under
+`results/<dataset>/`. Existing results can be rendered again without retraining:
+
+```bash
+python -m src.utils.results --dataset lastfm
+```
+
 ## Architecture
 
 ```mermaid

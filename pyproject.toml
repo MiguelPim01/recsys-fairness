@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "ipykernel>=7.2.0",
+    "matplotlib>=3.10.0",
     "numpy<2.0.0",
     "recbole>=1.2.1",
+    "scikit-learn>=1.7.2",
 ]
