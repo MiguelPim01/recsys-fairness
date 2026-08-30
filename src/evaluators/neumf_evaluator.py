@@ -1,4 +1,5 @@
 from src.evaluators.model_evaluator_interface import IModelEvaluator
+from src.models.neumf import NeuMF
 
 # ----- Config
 MODEL_NAME = "NeuMF"
@@ -15,4 +16,5 @@ class NeuMFEvaluator(IModelEvaluator):
     """Train, cross-validate and tune RecBole's NeuMF."""
 
     MODEL_NAME = MODEL_NAME
+    MODEL_CLASS = NeuMF
     HYPERPARAMETER_LABELS = HYPERPARAMETER_LABELS

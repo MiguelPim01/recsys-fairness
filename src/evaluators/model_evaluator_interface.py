@@ -23,6 +23,7 @@ class IModelEvaluator:
     """Train, cross-validate and tune a RecBole model."""
 
     MODEL_NAME = None
+    MODEL_CLASS = None
     HYPERPARAMETER_LABELS = {}
 
     def __init__(self, dataset_dir, config_path, hp_search_config_path, cross_validation_splitter = None):
@@ -344,8 +345,8 @@ class IModelEvaluator:
                 config_dict=config_dict,
             )
 
-    @staticmethod
-    def _create_model_and_trainer(config: Config, train_data):
+    @classmethod
+    def _create_model_and_trainer(cls, config: Config, train_data):
         """
         Creates a model and trainer.
 
@@ -359,9 +360,8 @@ class IModelEvaluator:
         """
         init_seed(config["seed"], config["reproducibility"])
         
-        model = get_model(config["model"])(config, train_data.dataset).to(
-            config["device"]
-        )
+        model_class = cls.MODEL_CLASS or get_model(config["model"])
+        model = model_class(config, train_data.dataset).to(config["device"])
         
         trainer_class = get_trainer(config["MODEL_TYPE"], config["model"])
         trainer = trainer_class(config, model)
