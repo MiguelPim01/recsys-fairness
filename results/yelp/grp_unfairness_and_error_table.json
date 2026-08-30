@@ -1,0 +1,41 @@
+{
+  "dataset": "yelp",
+  "columns": [
+    "model",
+    "grouping",
+    "rgrp",
+    "rmse"
+  ],
+  "rows": [
+    {
+      "model": "NeuMF",
+      "grouping": "Activity",
+      "rgrp": 0.017792980277830408,
+      "rmse": 1.0896613846286984
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Friends",
+      "rgrp": 0.005473104789980309,
+      "rmse": 1.0896613846286984
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Tenure",
+      "rgrp": 0.8953692449045602,
+      "rmse": 1.0896613846286984
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "K-Means",
+      "rgrp": 0.01619466657516294,
+      "rmse": 1.0896613846286984
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Agglomerative",
+      "rgrp": 0.017792980277830408,
+      "rmse": 1.0896613846286984
+    }
+  ]
+}
