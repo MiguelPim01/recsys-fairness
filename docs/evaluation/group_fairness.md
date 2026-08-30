@@ -40,6 +40,17 @@ Cada método avalia independentemente `k=2..10` pelo coeficiente de silhueta. Em
 empate, vence o menor `k`. Os grupos finais recebem nomes determinísticos pela ordenação
 dos centroides.
 
+## Agrupamentos Yelp
+
+- atividade do perfil: usuários ativos contra inativos;
+- amigos: nenhum, 1–10, 11–100 e 101 ou mais;
+- tenure: abaixo de 1 ano, 1–3, 3–5 e 5 anos ou mais;
+- K-Means e aglomerativo: atividade do perfil, `log1p(friend_count)`, tenure e
+  `log1p` da atividade no development.
+
+As quatro características dos grupos latentes são padronizadas. A seleção de `k`, os
+algoritmos e a nomenclatura determinística seguem o mesmo procedimento do LastFM.
+
 ## Validação por execução
 
 Não há testes automatizados para esta feature. A validação foi feita executando o código
@@ -86,9 +97,10 @@ artefatos editoriais em `results/lastfm/`:
 - `grp_unfairness_by_model_and_groups.pdf`;
 - `grp_loss_by_model_and_groups.pdf`.
 
-Os gráficos incluem atividade, idade, gênero, K-Means e aglomerativo. A tabela contém
-uma linha por modelo e agrupamento, com `Rgrp` e RMSE global. Como o JSON armazena as
-perdas MSE e suas quantidades de interações, o RMSE é recuperado por:
+No LastFM, os gráficos incluem atividade, idade, gênero, K-Means e aglomerativo; no
+Yelp, incluem atividade, amigos, tenure, K-Means e aglomerativo. A tabela contém uma
+linha por modelo e agrupamento, com `Rgrp` e RMSE global. Como o JSON armazena as perdas
+MSE e suas quantidades de interações, o RMSE é recuperado por:
 
 \[
 RMSE = \sqrt{\frac{\sum_g MSE_g |\Omega_g|}{\sum_g |\Omega_g|}}
@@ -101,4 +113,5 @@ Para regerar os arquivos sem treinar o modelo:
 
 ```bash
 python -m src.utils.results --dataset lastfm
+python -m src.utils.results --dataset yelp
 ```
