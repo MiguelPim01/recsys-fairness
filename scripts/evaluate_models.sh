@@ -16,7 +16,7 @@ Usage: scripts/evaluate_models.sh [options]
 Train and evaluate recommendation models.
 
 Options:
-  --model MODEL              Model to evaluate (default: neumf).
+  --model MODEL              Model to evaluate: neumf, multivae, or all (default: neumf).
   --dataset DATASET          Dataset to evaluate: all, lastfm, or yelp (default: all).
   --cross-validation         Run user-stratified cross-validation.
   --hyperparameter-search    Search configurations from the model search YAML.
@@ -25,6 +25,8 @@ Options:
 
 Examples:
   scripts/evaluate_models.sh
+  scripts/evaluate_models.sh --model multivae
+  scripts/evaluate_models.sh --model all --dataset yelp
   scripts/evaluate_models.sh --dataset yelp
   scripts/evaluate_models.sh --cross-validation
   scripts/evaluate_models.sh --hyperparameter-search
@@ -99,8 +101,21 @@ case "$model" in
             --dataset "$dataset" \
             "${evaluation_arguments[@]}"
         ;;
+    multivae)
+        exec "${python_command[@]}" -m src.scripts.evaluation.eval_multivae \
+            --dataset "$dataset" \
+            "${evaluation_arguments[@]}"
+        ;;
+    all)
+        "${python_command[@]}" -m src.scripts.evaluation.eval_neumf \
+            --dataset "$dataset" \
+            "${evaluation_arguments[@]}"
+        "${python_command[@]}" -m src.scripts.evaluation.eval_multivae \
+            --dataset "$dataset" \
+            "${evaluation_arguments[@]}"
+        ;;
     *)
-        echo "Unsupported model: $model. Available models: neumf." >&2
+        echo "Unsupported model: $model. Available models: neumf, multivae, all." >&2
         exit 2
         ;;
 esac
