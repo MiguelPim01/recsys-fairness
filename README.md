@@ -46,11 +46,19 @@ Possible flags:
 ```
 
 Possible flags:
-- `--model`: Choose which model do you want to run. Defaults to `neumf`.
+- `--model`: Choose `neumf`, `multivae`, or `all`. Defaults to `neumf`.
 - `--dataset`: Choose `all`, `lastfm`, or `yelp`. Defaults to `all`.
 - `--cross-validation`: Run user-stratified cross-validation.
 - `--hyperparameter-search`: Search configurations from the model search YAML.
 - `--folds`: Number of cross-validation folds. Defaults to `5`.
+
+Examples for selecting models:
+
+```bash
+./scripts/evaluate_models.sh --model neumf --dataset lastfm
+./scripts/evaluate_models.sh --model multivae --dataset yelp
+./scripts/evaluate_models.sh --model all --dataset all
+```
 
 After the final test evaluation, the command also calculates the configured user-group metrics and updates `results/results_<dataset>.json`. Fairness is evaluated only on the final holdout and is not used during hyperparameter selection. The methodology and the latest execution checks are documented in [`docs/evaluation/group_fairness.md`](docs/evaluation/group_fairness.md).
 
