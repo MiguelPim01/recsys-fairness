@@ -15,40 +15,32 @@ uv sync
 
 ### Transforming datasets
 
-1. Download the datasets:
+1. **Download the datasets**:
    - [LastFM-360K](https://ocelma.net/MusicRecommendationDataset/lastfm-360K.html)
    - [Yelp](https://business.yelp.com/data/resources/open-dataset/)
 
-2. Add the datasets to the folders:
+2. **Add the datasets to the folders**:
    - `data/raw/lastfm_360k`
    - `data/raw/yelp`
 
-3. Run the following command to transform the datasets into RecBole format:
+3. **Run the following command to transform the datasets into RecBole format**:
 ```bash
 ./scripts/transform_datasets.sh <dataset>
 ```
-You can run the script with three flags:
-   - `all`: Run for both datasets (default).
-   - `lastfm`: Run for LastFM-360K dataset only.
-   - `yelp`: Run for Yelp dataset only.
+Possible flags:
+   - `dataset`: The dataset to transform [`all`|`lastfm`|`yelp`]. Defaults to `all`.
 
-### Sampling datasets
-
-After transforming the raw files, create the reproducible 1000-user and
-1000-item samples:
+4. **Run the following script for sampling the dataset**:
 
 ```bash
 ./scripts/sample_datasets.sh <dataset>
 ```
-
-The command accepts `all` (default), `lastfm`, or `yelp`. It selects the 1000
-items with the most interactions and, using seed 42, samples 1000 users with at
-least six interactions among those items. Sampling statistics are printed in
-the terminal and the atomic files are written to `data/sample/<dataset>`.
+Possible flags:
+   - `dataset`: The dataset to transform [`all`|`lastfm`|`yelp`]. Defaults to `all`.
 
 ### Running models
 
-1. Run the script:
+1. **Run the script**:
 ```bash
 ./scripts/evaluate_models.sh --model <MODEL> --dataset <DATASET> --cross-validation --hyperparameter-search --folds N
 ```
@@ -60,18 +52,13 @@ Possible flags:
 - `--hyperparameter-search`: Search configurations from the model search YAML.
 - `--folds`: Number of cross-validation folds. Defaults to `5`.
 
-After the final test evaluation, the command also calculates the configured user-group
-metrics and updates `results/results_<dataset>.json`. Fairness is evaluated only on the
-final holdout and is not used during hyperparameter selection. The methodology and the
-latest execution checks are documented in
-[`docs/evaluation/group_fairness.md`](docs/evaluation/group_fairness.md).
+After the final test evaluation, the command also calculates the configured user-group metrics and updates `results/results_<dataset>.json`. Fairness is evaluated only on the final holdout and is not used during hyperparameter selection. The methodology and the latest execution checks are documented in [`docs/evaluation/group_fairness.md`](docs/evaluation/group_fairness.md).
 
-The evaluation also regenerates the publication table data and PDF figures under
-`results/<dataset>/`. Existing results can be rendered again without retraining:
+The evaluation also regenerates the publication table data and PDF figures under `results/<dataset>/`. Existing results can be rendered again without retraining:
 
 ```bash
-python -m src.utils.results --dataset lastfm
-python -m src.utils.results --dataset yelp
+uv run python -m src.utils.results --dataset lastfm
+uv run python -m src.utils.results --dataset yelp
 ```
 
 ## Architecture

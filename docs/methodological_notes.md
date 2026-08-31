@@ -118,30 +118,48 @@ Toda a pipeline de divisão de dados, validação cruzada, busca de hiperparâme
 
 ```mermaid
 graph LR
-    A["Dados"] --> B["Dados Development"]
-    A --> C["Dados Teste"]
+    I["Dados Brutos"] --> A["Dados RecBole"]
+    A --> S["Dados Amostrados"]
+
+    S --> B["Dados Development"]
+    S --> TE["Dados Teste"]
 
     B --> F1["Fold 1"]
     B --> F2["Fold 2"]
     B --> F3["Fold 3"]
     B --> FN["Fold N"]
 
-    F1 --> CV["Validação Cruzada"]
-    F2 --> CV
-    F3 --> CV
-    FN --> CV
+    F1 --> TA["Treinamento e Avaliação"]
+    F2 --> TA
+    F3 --> TA
+    FN --> TA
 
-    CV --> T["Treino"]
-    T --> TE
-    C --> TE["Teste"]
-    TE --> R["Resultados"]
+    TE --> TA
+
+    TA --> R["Resultados"]
+    TA --> M["Modelo"]
+
+    S --> GROUP["Agrupamentos"]
+    GROUP --> F["Métrica de Justiça"]
+    M --> F
+
+    F --> R
 ```
 
-Vale ressaltar alguns detalhes importantes com relação as decisões metodológicas desse fluxograma:
+1. `Dados Brutos`: Dados brutos dos datasets.
+2. `Dados RecBole`: Dados no formato atômico do Recbole.
+  - Nesta etapa, são realizados alguns filtros nos dados: 
+3. `Dados Amostrados`: Dados amostrados do resultado da transformação.
+  - Neste etapa, os dados são amostrados segundo os seguintes critérios: ...
+4. `Dados Development`: Dados destinados para treino e validação. Representam 80% dos dados totais.
+5. `Dados Teste`: Dados destinados para o teste final de generalização. Representam 20% dos dados totais.
+6. `Fold i`:  Um fold específico dos dados destinado a validação cruzada.
+7. `Treinamento e Avaliação`: Validação cruzada, tuning de hiperparâmetros e geração de métricas dos resultados do modelo.
+8. `Modelo`: Modelo treinado em cima dos `Dados de Development` (com os melhores hiperparâmetros selecionados na validação cruzada).
+9. `Agrupamentos`: Divisão de grupos no dados pelos metadados dos usuários. As divisão sempre serão por cada metadado presente nos `Dados Amostrados` + divisão por K-means e Agrupamento Hierárquico.
+10. `Métrica de Justiça`: Métrica de justiça calculada a partir do modelo e dos agrupamentos de usuários.
 
-1. 20% dos dados são destinados para teste e 80% destinados para development.
-2. O conjunto de development é dividido em um número N de folds (definido pelo usuário), em que 80% de cada fold é destinado para treino e 20% destinado para teste.
-   - Todas as divisões foram feitas por usuário, ou seja, para cada usuário deixamos 20% de suas interações para teste e 80% para development. O mesmo vale para a divisão dos folds.
-3. Utilizamos a validação cruzada em cima dos folds para fazer um tuning de hiperparâmetros e, após os melhores hiperparâmetros serem escolhidos treinamos o modelo com esses hiperparâmetros utilizando todo o conjunto de development (80% dos dados).
-   - Para esse passo utilizamos a mediana das épocas obtidas com early stopping nos folds para utilizar ela como número máximo de épocas no treinamento final.
-4. Utilizamos o melhor modelo dentre todas as épocas do passo anterior para testar a generalização dele no conjunto de teste.
+> Observações:
+>   - Todas as divisões dos dados foram feitas por usuário, ou seja, 80% dos dados para development e 20% para teste, de cada usuário. O mesmo vale para as divisões dentro dos folds.
+>   - Para o treinamento do modelo final, foi utilizado o número de épocas equivalente a mediana das épocas da etapa de validação cruzada. Isso aconteceu porque a RecBole não faz early stopping quando a opção de validação está desativada.
+>   - A validação cruzada serve especificamente para fazer o tuning de hiperparâmetros.
