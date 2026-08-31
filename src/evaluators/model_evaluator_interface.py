@@ -3,7 +3,7 @@ import sys
 import warnings
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import patch
 
 import numpy as np
@@ -15,10 +15,10 @@ from recbole.utils import get_model, get_trainer, init_seed
 from tqdm.auto import tqdm
 
 from src.fairness import GroupFairnessAnalyzer
+from src.utils.results import generate_result_artifacts
 
 # ----- Config
 LOGGER = logging.getLogger("recsys_fairness.evaluation")
-
 # -----
 
 class IModelEvaluator:
@@ -26,7 +26,7 @@ class IModelEvaluator:
 
     MODEL_NAME = None
     MODEL_CLASS = None
-    HYPERPARAMETER_LABELS = {}
+    HYPERPARAMETER_LABELS: ClassVar[dict] = {}
 
     def __init__(self, dataset_dir, config_path, hp_search_config_path, cross_validation_splitter = None):
         self.dataset_dir = Path(dataset_dir)
@@ -39,12 +39,12 @@ class IModelEvaluator:
         Evaluate the model.
 
         Args:
-            cross_validation (bool, optional): _description_. Defaults to False.
-            hyperparameter_search (bool, optional): _description_. Defaults to False.
-            n_splits (int, optional): _description_. Defaults to 5.
+            cross_validation (bool, optional): Whether to perform cross-validation. Defaults to False.
+            hyperparameter_search (bool, optional): Whether to perform hyperparameter search. Defaults to False.
+            n_splits (int, optional): The number of splits for cross-validation. Defaults to 5.
 
         Returns:
-            _type_: _description_
+            results (dict): Evaluation results, including best hyperparameters, validation results, and test results. 
         """
         self._configure_project_logging()
 
@@ -156,6 +156,7 @@ class IModelEvaluator:
         }
         
         LOGGER.info("Test | %s", self._format_metrics(test_result))
+        
         if results_path is not None:
             LOGGER.info("Fairness results | %s", results_path)
         
@@ -241,6 +242,7 @@ class IModelEvaluator:
         
         LOGGER.info("Validation | %s", self._format_metrics(best_valid_result))
         LOGGER.info("Test | %s", self._format_metrics(test_result))
+        
         if results_path is not None:
             LOGGER.info("Fairness results | %s", results_path)
         
@@ -251,12 +253,12 @@ class IModelEvaluator:
         Trains the model with validation and returns the best score and metrics.
 
         Args:
-            benchmark_filename (list[str]): _description_
-            hyperparameters (dict[str, Any]): _description_
-            run_seed (int): _description_
+            benchmark_filename (list[str]): File extensions that RecBole will use.
+            hyperparameters (dict[str, Any]): Hyperparameters to override the default configuration.
+            run_seed (int): Seed.
 
         Returns:
-            dict[str, Any]: _description_
+            results (dict[str, Any]): Best epoch, best score, and metrics.
         """
         config = self._build_config({
             "benchmark_filename": benchmark_filename,
@@ -300,12 +302,14 @@ class IModelEvaluator:
         Trains the model on the development data and evaluates it on the test data.
 
         Args:
-            benchmark_filename (list[str]): _description_
-            hyperparameters (dict[str, Any]): _description_
-            epochs (int): _description_
+            benchmark_filename (list[str]): File extensions that RecBole will use.
+            hyperparameters (dict[str, Any]): Hyperparameters to override the default configuration.
+            epochs (int): The number of epochs to train the model.
 
         Returns:
-            _type_: _description_
+            test_result: The evaluation results on the test data.
+            analysis: The group-fairness analysis results.
+            results_path: The path to the directory containing the analysis results.
         """
         config = self._build_config({
             "benchmark_filename": benchmark_filename,
@@ -341,6 +345,7 @@ class IModelEvaluator:
             development_data=(train_data, valid_data),
             test_result=test_result,
         )
+        
         return test_result, analysis, results_path
 
     def _build_config(self, overrides = None) -> Config:
@@ -351,7 +356,7 @@ class IModelEvaluator:
             overrides (dict, optional): Overide configuration. Defaults to None.
 
         Returns:
-            Config: Configuration object for the RecBole model.
+            config (Config): Configuration object for the RecBole model.
         """
         
         config_dict = {
@@ -410,15 +415,21 @@ class IModelEvaluator:
                 show_progress=False,
             )
 
-    def _analyze_final_test(
-        self,
-        trainer,
-        config,
-        test_data,
-        development_data,
-        test_result,
-    ):
-        """Run detailed group-fairness analysis only for the final test."""
+    def _analyze_final_test(self, trainer, config, test_data, development_data, test_result):
+        """
+        Run detailed group-fairness analysis only for the final test.
+        
+        Args:
+            trainer: RecBole trainer.
+            config: RecBole configuration.
+            test_data: Test data prepared by RecBole.
+            development_data: Tuple of (train_data, valid_data) prepared by RecBole.
+            test_result: Test results.
+        
+        Returns:
+            analysis: The group-fairness analysis results.
+            results_path: The path to the directory containing the analysis results.
+        """
         settings = config["fairness"]
         if not settings or not settings.get("enabled", False):
             return None, None
@@ -434,10 +445,11 @@ class IModelEvaluator:
             development_data=development_data,
             recbole_metrics=test_result,
         )
-        from src.utils.results import generate_result_artifacts
 
         artifacts = generate_result_artifacts(results_path)
+        
         LOGGER.info("Result artifacts | %s", next(iter(artifacts.values())).parent)
+        
         return analysis, results_path
 
     def _load_hyperparameter_candidates(self) -> list[dict[str, Any]]:

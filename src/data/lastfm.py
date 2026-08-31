@@ -5,6 +5,22 @@ from pathlib import Path
 
 from tqdm.auto import tqdm
 
+# ----- Config
+STATISTICS = [
+    "raw_user_profiles",
+    "complete_user_profiles",
+    "dropped_incomplete_user_profiles",
+    "raw_interactions",
+    "dropped_invalid_user_rows",
+    "dropped_missing_profile_user_rows",
+    "dropped_incomplete_profile_user_rows",
+    "dropped_nonpositive_play_rows",
+    "dropped_missing_artist_rows",
+    "aggregated_duplicate_rows",
+    "written_interactions",
+]
+# -----
+
 
 class LastFMTransformDataset:
     """Transform the LastFM-360K files into RecBole atomic files."""
@@ -26,19 +42,7 @@ class LastFMTransformDataset:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         statistics = defaultdict(int)
-        for name in (
-            "raw_user_profiles",
-            "complete_user_profiles",
-            "dropped_incomplete_user_profiles",
-            "raw_interactions",
-            "dropped_invalid_user_rows",
-            "dropped_missing_profile_user_rows",
-            "dropped_incomplete_profile_user_rows",
-            "dropped_nonpositive_play_rows",
-            "dropped_missing_artist_rows",
-            "aggregated_duplicate_rows",
-            "written_interactions",
-        ):
+        for name in STATISTICS:
             statistics[name] = 0
 
         # Writing interaction matrix
@@ -62,12 +66,7 @@ class LastFMTransformDataset:
 
         return dict(statistics)
 
-    def _transform_interactions(
-        self,
-        profile_users,
-        complete_profile_users,
-        statistics,
-    ):
+    def _transform_interactions(self, profile_users, complete_profile_users, statistics):
         """
         Main logic for writing lastfm.inter file.
 
@@ -194,13 +193,7 @@ class LastFMTransformDataset:
 
                 users.add(user_id)
 
-                if not self._has_complete_metadata(
-                    user_id,
-                    gender,
-                    raw_age,
-                    country,
-                    signup_date,
-                ):
+                if not self._has_complete_metadata(user_id, gender, raw_age, country, signup_date):
                     statistics["dropped_incomplete_user_profiles"] += 1
                     continue
 
@@ -242,27 +235,12 @@ class LastFMTransformDataset:
 
             progress = tqdm(reader, total=total_users, desc="  users", unit="user", dynamic_ncols=True)
             for row_number, row in enumerate(progress, start=1):
-                if len(row) != 5:
-                    raise ValueError(
-                        f"Expected 5 columns at profile row {row_number}"
-                    )
-
                 user_id, gender, raw_age, country, signup_date = map(str.strip, row)
 
                 if user_id not in interaction_users:
                     continue
-                if user_id in written_users:
-                    raise ValueError(f"Duplicate user profile for {user_id}")
 
                 age = self._valid_age(raw_age)
-                if not self._has_complete_metadata(
-                    user_id,
-                    gender,
-                    raw_age,
-                    country,
-                    signup_date,
-                ):
-                    raise ValueError(f"Incomplete metadata for user {user_id}")
 
                 # Adding user data
                 writer.writerow([
@@ -306,7 +284,11 @@ class LastFMTransformDataset:
             # Writing item profiles
             progress = tqdm(items.items(), total=len(items), desc="  items", unit="item", dynamic_ncols=True)
             for item_id, (musicbrainz_id, artist_name) in progress:
-                writer.writerow([item_id, musicbrainz_id, artist_name])
+                writer.writerow([
+                    item_id, 
+                    musicbrainz_id, 
+                    artist_name
+                ])
 
     def _item_id(cls, musicbrainz_id: str, artist_name: str) -> str:
         if musicbrainz_id:
@@ -336,7 +318,11 @@ class LastFMTransformDataset:
             statistics: Statistics dictionary.
         """
         for item_id, play_count in interactions.items():
-            writer.writerow([user_id, item_id, play_count])
+            writer.writerow([
+                user_id, 
+                item_id, 
+                play_count
+            ])
 
             statistics["written_interactions"] += 1
 
@@ -355,14 +341,7 @@ class LastFMTransformDataset:
         return str(numeric_age) if numeric_age > 0 else ""
 
     @classmethod
-    def _has_complete_metadata(
-        cls,
-        user_id: str,
-        gender: str,
-        raw_age: str,
-        country: str,
-        signup_date: str,
-    ) -> bool:
+    def _has_complete_metadata(cls, user_id, gender, raw_age, country, signup_date):
         return bool(
             user_id
             and gender
