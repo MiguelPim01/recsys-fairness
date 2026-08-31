@@ -145,6 +145,7 @@ class LastFMTransformDataset:
 
                     current_user = user_id
                     current_interactions = {}
+                    
                     users.add(user_id)
 
                 if item_id in current_interactions:

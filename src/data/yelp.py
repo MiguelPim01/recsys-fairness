@@ -7,6 +7,23 @@ from pathlib import Path
 
 from tqdm.auto import tqdm
 
+# ----- Config
+STATISTICS = [
+    "raw_user_profiles",
+    "complete_user_profiles",
+    "dropped_incomplete_user_profiles",
+    "raw_interactions",
+    "dropped_missing_user_interactions",
+    "dropped_incomplete_user_interactions",
+    "dropped_missing_item_interactions",
+    "dropped_duplicate_interactions",
+    "interactions",
+    "users",
+    "active_users",
+    "items",
+]
+# -----
+
 
 class YelpTransformDataset:
     """Transform the Yelp Open Dataset into RecBole atomic files."""
@@ -21,28 +38,19 @@ class YelpTransformDataset:
         self.output_dir = Path(output_dir)
 
     def transform(self):
+        """
+        Transforms the Yelp dataset into RecBole format.
+
+        Returns:
+            statistics (dict[str, int]): Statistics dictionary.
+        """
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         statistics = defaultdict(int)
-        for name in (
-            "raw_user_profiles",
-            "complete_user_profiles",
-            "dropped_incomplete_user_profiles",
-            "raw_interactions",
-            "dropped_missing_user_interactions",
-            "dropped_incomplete_user_interactions",
-            "dropped_missing_item_interactions",
-            "dropped_duplicate_interactions",
-            "interactions",
-            "users",
-            "active_users",
-            "items",
-        ):
+        for name in STATISTICS:
             statistics[name] = 0
 
-        activity_threshold, known_users, complete_users, total_users = (
-            self._activity_data(statistics)
-        )
+        activity_threshold, known_users, complete_users, total_users = self._activity_data(statistics)
         known_items = self._item_ids()
         
         # Transforms interactions
@@ -53,7 +61,7 @@ class YelpTransformDataset:
             statistics,
         )
         
-        # Transforms users and items
+        # Transforms users
         self._transform_users(
             users,
             reference_date,
@@ -61,6 +69,8 @@ class YelpTransformDataset:
             total_users,
             statistics,
         )
+        
+        # Transforms items
         self._transform_items(items, len(known_items), statistics)
 
         statistics["activity_threshold"] = activity_threshold
@@ -68,13 +78,7 @@ class YelpTransformDataset:
         
         return dict(statistics)
 
-    def _transform_interactions(
-        self,
-        known_users,
-        complete_users,
-        known_items,
-        statistics,
-    ):
+    def _transform_interactions(self, known_users, complete_users, known_items, statistics):
         """
         Writes down the interaction matrix.
             - user_id
@@ -157,9 +161,6 @@ class YelpTransformDataset:
                 ])
                 
                 statistics["interactions"] += 1
-        
-        if reference_date is None:
-            raise ValueError("The Yelp reviews file contains no interactions")
 
         return users, items, reference_date
 
@@ -186,9 +187,11 @@ class YelpTransformDataset:
                 statistics["raw_user_profiles"] += 1
 
                 user_id = str(user.get("user_id") or "").strip()
+                
                 if not user_id:
                     statistics["dropped_incomplete_user_profiles"] += 1
                     continue
+                
                 if user_id in user_ids:
                     raise ValueError(f"Duplicate user profile for {user_id}")
 
@@ -199,11 +202,9 @@ class YelpTransformDataset:
                     continue
 
                 review_counts.append(int(user["review_count"]))
+                
                 complete_user_ids.add(user_id)
                 statistics["complete_user_profiles"] += 1
-
-        if not review_counts:
-            raise ValueError("The Yelp dataset has no users with complete metadata")
 
         review_counts.sort()
         percentile_index = math.ceil(0.95 * len(review_counts)) - 1
