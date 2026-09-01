@@ -36,6 +36,36 @@
       "grouping": "Agglomerative",
       "rgrp": 0.017792980277830408,
       "rmse": 1.0896613846286984
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Activity",
+      "rgrp": 0.021514542742906907,
+      "rmse": 1.1915486865671499
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Friends",
+      "rgrp": 0.018353243247054403,
+      "rmse": 1.1915486865671499
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Tenure",
+      "rgrp": 0.24882609838039846,
+      "rmse": 1.1915486865671499
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "K-Means",
+      "rgrp": 0.02318646788714537,
+      "rmse": 1.1915486865671499
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Agglomerative",
+      "rgrp": 0.021514542742906907,
+      "rmse": 1.1915486865671499
     }
   ]
 }

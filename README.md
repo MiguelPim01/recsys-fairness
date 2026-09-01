@@ -13,7 +13,7 @@ uv sync
 
 ## Usage
 
-### Transforming datasets
+### Setup
 
 1. **Download the datasets**:
    - [LastFM-360K](https://ocelma.net/MusicRecommendationDataset/lastfm-360K.html)
@@ -23,14 +23,29 @@ uv sync
    - `data/raw/lastfm_360k`
    - `data/raw/yelp`
 
-3. **Run the following command to transform the datasets into RecBole format**:
+### Run experiments
+
+You can run all the experiments with the command:
+```bash
+make run_experiments
+```
+
+This will run the experiment pipeline for all models and datasets.
+
+You can also run each script separately.
+
+### Run separately
+
+#### Transforming datasets
+
+1. **Run the following command to transform the datasets into RecBole format**:
 ```bash
 ./scripts/transform_datasets.sh <dataset>
 ```
 Possible flags:
    - `dataset`: The dataset to transform [`all`|`lastfm`|`yelp`]. Defaults to `all`.
 
-4. **Run the following script for sampling the dataset**:
+2. **Run the following script for sampling the dataset**:
 
 ```bash
 ./scripts/sample_datasets.sh <dataset>
@@ -60,9 +75,9 @@ Examples for selecting models:
 ./scripts/evaluate_models.sh --model all --dataset all
 ```
 
-After the final test evaluation, the command also calculates the configured user-group metrics and updates `results/results_<dataset>.json`. Fairness is evaluated only on the final holdout and is not used during hyperparameter selection. The methodology and the latest execution checks are documented in [`docs/evaluation/group_fairness.md`](docs/evaluation/group_fairness.md).
+All results will be persisted in files `results/results_<dataset>.json`. Graphics and data tables are persisted in folders `results/<dataset>/`.
 
-The evaluation also regenerates the publication table data and PDF figures under `results/<dataset>/`. Existing results can be rendered again without retraining:
+Existing results can be rendered again without retraining:
 
 ```bash
 uv run python -m src.utils.results --dataset lastfm
@@ -72,12 +87,33 @@ uv run python -m src.utils.results --dataset yelp
 ## Architecture
 
 ```mermaid
-flowchart LR
-    A["Raw Datasets"] --> B["Atomic Data"]
-    B --> C["Filtered Data"]
+graph LR
+    I["Raw Data"] --> A["RecBole Data"]
+    A --> S["Sampled Data"]
 
-    C --> D["Training and Evaluation"]
-    D --> E["Results"]
+    S --> B["Development Data"]
+    S --> TE["Test Data"]
+
+    B --> F1["Fold 1"]
+    B --> F2["Fold 2"]
+    B --> F3["Fold 3"]
+    B --> FN["Fold N"]
+
+    F1 --> TA["Training and Evaluation"]
+    F2 --> TA
+    F3 --> TA
+    FN --> TA
+
+    TE --> TA
+
+    TA --> R["Results"]
+    TA --> M["Model"]
+
+    S --> GROUP["Groups"]
+    GROUP --> F["Fairness Metric"]
+    M --> F
+
+    F --> R
 ```
 
 All methodological decisions are documented in [method_documentation](docs/methodological_notes.md).
