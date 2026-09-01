@@ -4,6 +4,7 @@ from pathlib import Path
 from src.evaluators.multivae_evaluator import MultiVAEEvaluator
 from src.splitters.lastfm_cross_val import LastFMCrossValidationSplitter
 from src.splitters.yelp_cross_val import YelpCrossValidationSplitter
+from src.utils.console import ConsoleColor, styled_print
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -66,7 +67,11 @@ def main():
     for dataset_name in dataset_names:
         settings = DATASETS[dataset_name]
 
-        print(f"===== EVALUATING MultiVAE ON {dataset_name.upper()} =====")
+        styled_print(
+            f"===== EVALUATING MultiVAE ON {dataset_name.upper()} =====",
+            ConsoleColor.YELLOW,
+            bold=True,
+        )
 
         dataset_dir = REPOSITORY_ROOT / "data/sample" / dataset_name
         config_path = REPOSITORY_ROOT / "config/models" / settings["config"]

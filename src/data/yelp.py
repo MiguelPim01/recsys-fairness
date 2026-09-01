@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from tqdm.auto import tqdm
+from src.utils.console import styled_tqdm
 
 # ----- Config
 STATISTICS = [
@@ -118,7 +118,13 @@ class YelpTransformDataset:
                 "timestamp:float"
             ])
 
-            progress = tqdm(input_file, total=total_interactions, desc="  interactions", unit="interaction", dynamic_ncols=True)
+            progress = styled_tqdm(
+                input_file,
+                total=total_interactions,
+                desc="  interactions",
+                unit="interaction",
+                dynamic_ncols=True,
+            )
             for line in progress:
                 review = json.loads(line)
                 review_date = datetime.fromisoformat(review["date"])
@@ -263,7 +269,13 @@ class YelpTransformDataset:
                 "tenure_years:float",
             ])
 
-            progress = tqdm(input_file, total=total_users, desc="  users", unit="user", dynamic_ncols=True)
+            progress = styled_tqdm(
+                input_file,
+                total=total_users,
+                desc="  users",
+                unit="user",
+                dynamic_ncols=True,
+            )
             for line in progress:
                 user = json.loads(line)
                 user_id = user["user_id"]
@@ -334,7 +346,13 @@ class YelpTransformDataset:
                 "categories:token_seq",
             ])
 
-            progress = tqdm(input_file, total=total_items, desc="  items", unit="item", dynamic_ncols=True)
+            progress = styled_tqdm(
+                input_file,
+                total=total_items,
+                desc="  items",
+                unit="item",
+                dynamic_ncols=True,
+            )
             for line in progress:
                 business = json.loads(line)
                 item_id = business["business_id"]

@@ -3,7 +3,7 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-from tqdm.auto import tqdm
+from src.utils.console import styled_tqdm
 
 # ----- Config
 STATISTICS = [
@@ -99,7 +99,13 @@ class LastFMTransformDataset:
                 "play_count:float"
             ])
 
-            progress = tqdm(reader, total=total_interactions, desc="  interactions", unit="interaction", dynamic_ncols=True)
+            progress = styled_tqdm(
+                reader,
+                total=total_interactions,
+                desc="  interactions",
+                unit="interaction",
+                dynamic_ncols=True,
+            )
             for row in progress:
                 statistics["raw_interactions"] += 1
 
@@ -234,7 +240,13 @@ class LastFMTransformDataset:
                 "signup_date:token",
             ])
 
-            progress = tqdm(reader, total=total_users, desc="  users", unit="user", dynamic_ncols=True)
+            progress = styled_tqdm(
+                reader,
+                total=total_users,
+                desc="  users",
+                unit="user",
+                dynamic_ncols=True,
+            )
             for row_number, row in enumerate(progress, start=1):
                 user_id, gender, raw_age, country, signup_date = map(str.strip, row)
 
@@ -283,7 +295,13 @@ class LastFMTransformDataset:
             ])
 
             # Writing item profiles
-            progress = tqdm(items.items(), total=len(items), desc="  items", unit="item", dynamic_ncols=True)
+            progress = styled_tqdm(
+                items.items(),
+                total=len(items),
+                desc="  items",
+                unit="item",
+                dynamic_ncols=True,
+            )
             for item_id, (musicbrainz_id, artist_name) in progress:
                 writer.writerow([
                     item_id, 

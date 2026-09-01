@@ -2,9 +2,8 @@ import csv
 import math
 from pathlib import Path
 
-from tqdm.auto import tqdm
-
 from src.sampler.dataset_sampler_interface import IDatasetSampler
+from src.utils.console import styled_tqdm
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
@@ -18,8 +17,8 @@ class LastFMSampler(IDatasetSampler):
         self,
         source_dir=REPOSITORY_ROOT / "data/processed/lastfm",
         output_dir=REPOSITORY_ROOT / "data/sample/lastfm",
-        user_limit=1000,
-        item_limit=1000,
+        user_limit=50,
+        item_limit=50,
         seed=42,
         minimum_user_interactions=6,
     ):
@@ -38,6 +37,7 @@ class LastFMSampler(IDatasetSampler):
         output_path,
         selected_users,
         selected_items,
+        interaction_total,
     ):
         interactions = []
         interacted_items = set()
@@ -46,8 +46,9 @@ class LastFMSampler(IDatasetSampler):
             reader = csv.reader(input_file, delimiter="\t")
             self._require_header(reader, source_path)
 
-            progress = tqdm(
+            progress = styled_tqdm(
                 reader,
+                total=interaction_total,
                 desc="  interactions",
                 unit="interaction",
                 dynamic_ncols=True,

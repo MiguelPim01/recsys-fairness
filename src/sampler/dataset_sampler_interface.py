@@ -3,7 +3,7 @@ import random
 from collections import Counter
 from pathlib import Path
 
-from tqdm.auto import tqdm
+from src.utils.console import styled_tqdm
 
 
 class IDatasetSampler:
@@ -15,8 +15,8 @@ class IDatasetSampler:
         self,
         source_dir,
         output_dir,
-        user_limit=1000,
-        item_limit=1000,
+        user_limit=50,
+        item_limit=50,
         seed=42,
         minimum_user_interactions=6,
     ):
@@ -39,8 +39,19 @@ class IDatasetSampler:
         item_path = self.source_dir / f"{self.DATASET_NAME}.item"
         self._require_files(interaction_path, user_path, item_path)
 
-        selected_items, source_interactions = self._select_items(interaction_path)
-        eligible_users = self._eligible_users(interaction_path, selected_items)
+        interaction_total = self._count_data_rows(interaction_path)
+        user_total = self._count_data_rows(user_path)
+        item_total = self._count_data_rows(item_path)
+
+        selected_items, source_interactions = self._select_items(
+            interaction_path,
+            interaction_total,
+        )
+        eligible_users = self._eligible_users(
+            interaction_path,
+            selected_items,
+            interaction_total,
+        )
         selected_users = self._select_users(eligible_users)
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -54,18 +65,21 @@ class IDatasetSampler:
             output_interaction_path,
             selected_users,
             selected_items,
+            interaction_total,
         )
         written_users = self._write_selected_entities(
             user_path,
             output_user_path,
             selected_users,
             "users",
+            user_total,
         )
         written_items = self._write_selected_entities(
             item_path,
             output_item_path,
             selected_items,
             "items",
+            item_total,
         )
 
         if written_users != selected_users:
@@ -90,7 +104,7 @@ class IDatasetSampler:
             "minimum_user_interactions": self.minimum_user_interactions,
         }
 
-    def _select_items(self, interaction_path):
+    def _select_items(self, interaction_path, interaction_total):
         item_interactions = Counter()
         interaction_count = 0
 
@@ -98,8 +112,9 @@ class IDatasetSampler:
             reader = csv.reader(input_file, delimiter="\t")
             self._require_header(reader, interaction_path)
 
-            progress = tqdm(
+            progress = styled_tqdm(
                 reader,
+                total=interaction_total,
                 desc="  ranking items",
                 unit="interaction",
                 dynamic_ncols=True,
@@ -122,15 +137,21 @@ class IDatasetSampler:
 
         return set(ranked_items[:self.item_limit]), interaction_count
 
-    def _eligible_users(self, interaction_path, selected_items):
+    def _eligible_users(
+        self,
+        interaction_path,
+        selected_items,
+        interaction_total,
+    ):
         user_interactions = Counter()
 
         with interaction_path.open(encoding="utf-8", newline="") as input_file:
             reader = csv.reader(input_file, delimiter="\t")
             self._require_header(reader, interaction_path)
 
-            progress = tqdm(
+            progress = styled_tqdm(
                 reader,
+                total=interaction_total,
                 desc="  finding users",
                 unit="interaction",
                 dynamic_ncols=True,
@@ -167,6 +188,7 @@ class IDatasetSampler:
         output_path,
         selected_users,
         selected_items,
+        interaction_total,
     ):
         interaction_count = 0
         interacted_items = set()
@@ -183,8 +205,9 @@ class IDatasetSampler:
             writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
             writer.writerow(self._require_header(reader, source_path))
 
-            progress = tqdm(
+            progress = styled_tqdm(
                 reader,
+                total=interaction_total,
                 desc="  interactions",
                 unit="interaction",
                 dynamic_ncols=True,
@@ -209,6 +232,7 @@ class IDatasetSampler:
         output_path,
         selected_ids,
         description,
+        entity_total,
     ):
         written_ids = set()
 
@@ -227,8 +251,9 @@ class IDatasetSampler:
                 raise ValueError(f"Atomic file is empty: {source_path}")
             writer.writerow(header)
 
-            progress = tqdm(
+            progress = styled_tqdm(
                 reader,
+                total=entity_total,
                 desc=f"  {description}",
                 unit=description[:-1],
                 dynamic_ncols=True,
@@ -252,6 +277,21 @@ class IDatasetSampler:
             raise ValueError(f"Atomic file is empty: {path}")
 
         return header
+
+    @staticmethod
+    def _count_data_rows(path):
+        line_count = 0
+        last_byte = b""
+
+        with path.open("rb") as input_file:
+            for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
+                line_count += chunk.count(b"\n")
+                last_byte = chunk[-1:]
+
+        if last_byte and last_byte != b"\n":
+            line_count += 1
+
+        return max(line_count - 1, 0)
 
     @staticmethod
     def _validate_row(row, path, minimum_columns):

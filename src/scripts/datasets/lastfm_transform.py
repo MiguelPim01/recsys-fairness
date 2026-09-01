@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 from src.data.lastfm import LastFMTransformDataset
+from src.utils.console import styled_print
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -35,14 +36,20 @@ def parse_arguments():
 def main():
     arguments = parse_arguments()
     
-    print("Transforming LastFM-360K into RecBole atomic files...")
+    styled_print(
+        "Transforming LastFM-360K into RecBole atomic files...",
+        bold=True,
+    )
     
     transformer = LastFMTransformDataset(arguments.raw_dir, arguments.output_dir)
     statistics = transformer.transform()
 
-    print(f"\nLastFM atomic files created in {arguments.output_dir.resolve()}")
+    styled_print(
+        f"\nLastFM atomic files created in {arguments.output_dir.resolve()}",
+        bold=True,
+    )
     for name, value in statistics.items():
-        print(f"{name}: {value}")
+        styled_print(f"{name}: {value}")
     print()
 
 

@@ -14,8 +14,8 @@ class YelpSampler(IDatasetSampler):
         self,
         source_dir=REPOSITORY_ROOT / "data/processed/yelp",
         output_dir=REPOSITORY_ROOT / "data/sample/yelp",
-        user_limit=1000,
-        item_limit=1000,
+        user_limit=50,
+        item_limit=50,
         seed=42,
         minimum_user_interactions=6,
     ):

@@ -12,9 +12,9 @@ import yaml
 from recbole.config import Config
 from recbole.data import create_dataset, data_preparation
 from recbole.utils import get_model, get_trainer, init_seed
-from tqdm.auto import tqdm
 
 from src.fairness import GroupFairnessAnalyzer
+from src.utils.console import ConsoleColor, StyledFormatter, styled_tqdm
 from src.utils.results import generate_result_artifacts
 
 # ----- Config
@@ -90,7 +90,13 @@ class IModelEvaluator:
             
             fold_results = []
             
-            progress = tqdm(fold_indexes, desc="  folds", unit="fold", dynamic_ncols=True,)
+            progress = styled_tqdm(
+                fold_indexes,
+                ConsoleColor.YELLOW,
+                desc="  folds",
+                unit="fold",
+                dynamic_ncols=True,
+            )
             for fold in progress:
                 run = self._train_with_validation(
                     benchmark_filename=splitter.fold_benchmark(fold),
@@ -549,7 +555,9 @@ class IModelEvaluator:
         LOGGER.handlers.clear()
         
         handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler.setFormatter(
+            StyledFormatter(ConsoleColor.YELLOW, sys.stdout, fmt="%(message)s")
+        )
         
         LOGGER.addHandler(handler)
         

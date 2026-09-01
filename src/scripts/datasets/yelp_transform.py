@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 
 from src.data.yelp import YelpTransformDataset
+from src.utils.console import styled_print
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -28,14 +29,20 @@ def parse_arguments():
 def main():
     arguments = parse_arguments()
     
-    print("Transforming the Yelp Open Dataset into RecBole atomic files...")
+    styled_print(
+        "Transforming the Yelp Open Dataset into RecBole atomic files...",
+        bold=True,
+    )
     
     transformer = YelpTransformDataset(arguments.raw_dir, arguments.output_dir)
     statistics = transformer.transform()
 
-    print(f"\nYelp atomic files created in {arguments.output_dir.resolve()}")
+    styled_print(
+        f"\nYelp atomic files created in {arguments.output_dir.resolve()}",
+        bold=True,
+    )
     for name, value in statistics.items():
-        print(f"{name}: {value}")
+        styled_print(f"{name}: {value}")
     print()
 
 
