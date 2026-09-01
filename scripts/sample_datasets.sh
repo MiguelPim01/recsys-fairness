@@ -24,12 +24,8 @@ case "$dataset" in
         exec "${python_command[@]}" -m src.scripts.datasets.yelp_sample "$@"
         ;;
     all)
-        if (( $# > 0 )); then
-            echo "The 'all' option does not accept sampler arguments." >&2
-            exit 2
-        fi
-        "${python_command[@]}" -m src.scripts.datasets.lastfm_sample
-        "${python_command[@]}" -m src.scripts.datasets.yelp_sample
+        "${python_command[@]}" -m src.scripts.datasets.lastfm_sample "$@"
+        "${python_command[@]}" -m src.scripts.datasets.yelp_sample "$@"
         ;;
     *)
         echo "Usage: $0 [lastfm|yelp|all] [sampler arguments]" >&2

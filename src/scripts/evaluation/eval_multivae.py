@@ -64,7 +64,7 @@ def main():
     )
     dataset_names = DATASETS if arguments.dataset == "all" else (arguments.dataset,)
 
-    for dataset_name in dataset_names:
+    for dataset_index, dataset_name in enumerate(dataset_names):
         settings = DATASETS[dataset_name]
 
         styled_print(
@@ -87,6 +87,8 @@ def main():
             cross_validation=arguments.cross_validation,
             hyperparameter_search=arguments.hyperparameter_search,
             n_splits=arguments.folds,
+            estimate_runtime=dataset_index == 0,
+            dataset_count=len(dataset_names),
         )
 
 

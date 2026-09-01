@@ -1,5 +1,6 @@
 import logging
 import sys
+import time
 import warnings
 from functools import partial
 from pathlib import Path
@@ -34,7 +35,14 @@ class IModelEvaluator:
         self.hp_search_config_path = Path(hp_search_config_path)
         self.cross_validation_splitter = cross_validation_splitter
 
-    def evaluate(self, cross_validation = False, hyperparameter_search = False, n_splits = 5):
+    def evaluate(
+        self,
+        cross_validation=False,
+        hyperparameter_search=False,
+        n_splits=5,
+        estimate_runtime=False,
+        dataset_count=1,
+    ):
         """
         Evaluate the model.
 
@@ -42,6 +50,10 @@ class IModelEvaluator:
             cross_validation (bool, optional): Whether to perform cross-validation. Defaults to False.
             hyperparameter_search (bool, optional): Whether to perform hyperparameter search. Defaults to False.
             n_splits (int, optional): The number of splits for cross-validation. Defaults to 5.
+            estimate_runtime (bool, optional): Whether to estimate the model's total
+                training time from its first fold. Defaults to False.
+            dataset_count (int, optional): Number of datasets included in the model
+                execution. Defaults to 1.
 
         Returns:
             results (dict): Evaluation results, including best hyperparameters, validation results, and test results. 
@@ -64,6 +76,9 @@ class IModelEvaluator:
         candidates = self._load_hyperparameter_candidates() if hyperparameter_search else [{}]
         
         fold_indexes = range(n_splits) if cross_validation else range(1)
+        total_training_runs = dataset_count * (
+            len(candidates) * len(fold_indexes) + 1
+        )
         
         candidate_results = []
         validation_runs = len(candidates) * len(fold_indexes)
@@ -98,11 +113,24 @@ class IModelEvaluator:
                 dynamic_ncols=True,
             )
             for fold in progress:
+                first_training_run = candidate_index == 1 and fold == 0
+                start_time = time.perf_counter() if first_training_run else None
                 run = self._train_with_validation(
                     benchmark_filename=splitter.fold_benchmark(fold),
                     hyperparameters=hyperparameters,
                     run_seed=base_config["seed"] + fold,
                 )
+
+                if estimate_runtime and first_training_run:
+                    elapsed_hours = (
+                        time.perf_counter() - start_time
+                    ) * total_training_runs / 3600
+                    LOGGER.info(
+                        "Estimativa de duração do %s: %.2f horas (%d treinos)\n",
+                        self.MODEL_NAME,
+                        elapsed_hours,
+                        total_training_runs,
+                    )
                 
                 fold_results.append({
                     "fold": fold,

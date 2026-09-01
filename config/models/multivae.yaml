@@ -50,7 +50,8 @@ dropout_prob: 0.5
 anneal_cap: 0.2
 total_anneal_steps: 200000
 
-use_gpu: false
+use_gpu: true
+gpu_id: 0
 worker: 0
 show_progress: true
 save_dataset: false

@@ -52,7 +52,8 @@ mf_train: true
 mlp_train: true
 use_pretrain: false
 
-use_gpu: false
+use_gpu: true
+gpu_id: 0
 worker: 0
 show_progress: true
 save_dataset: false

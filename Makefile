@@ -1,5 +1,8 @@
 .PHONY: run_experiments clean
 
+USER_LIMIT ?= 1000
+ITEM_LIMIT ?= 1000
+
 define default_heading
 	@if [ -t 1 ] && [ -z "$${NO_COLOR+x}" ]; then printf '\033[1m%s\033[0m\n' "$(1)"; else printf '%s\n' "$(1)"; fi
 endef
@@ -18,7 +21,7 @@ run_experiments:
 	./scripts/transform_datasets.sh all
 
 	$(call default_heading,Sampling datasets)
-	./scripts/sample_datasets.sh all
+	./scripts/sample_datasets.sh all --user-limit $(USER_LIMIT) --item-limit $(ITEM_LIMIT)
 	
 	$(call yellow_heading,Running experiments)
 	$(call yellow_command,./scripts/evaluate_models.sh --model all --dataset all --cross-validation --hyperparameter-search --folds 5)
