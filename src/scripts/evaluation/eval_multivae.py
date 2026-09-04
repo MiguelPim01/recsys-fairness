@@ -33,6 +33,20 @@ def parse_arguments():
         default="all",
         help="Dataset to evaluate (default: all).",
     )
+    
+    parser.add_argument(
+        "--user-limit",
+        type=int,
+        default=1000,
+        help="Number of sampled users (default: 1000).",
+    )
+
+    parser.add_argument(
+        "--item-limit",
+        type=int,
+        default=1000,
+        help="Number of sampled items (default: 1000).",
+    )
 
     parser.add_argument(
         "--cross-validation",
@@ -78,6 +92,8 @@ def main():
 
         evaluator = MultiVAEEvaluator(
             dataset_dir=dataset_dir,
+            user_limit=arguments.user_limit,
+            item_limit=arguments.item_limit,
             config_path=config_path,
             hp_search_config_path=hyperparameter_config_path,
             cross_validation_splitter=settings["splitter"],

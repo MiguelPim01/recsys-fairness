@@ -7,6 +7,8 @@ cd "$repository_root"
 
 model="neumf"
 dataset="all"
+user_limit=1000
+item_limit=1000
 evaluation_arguments=()
 
 show_help() {
@@ -18,6 +20,8 @@ Train and evaluate recommendation models.
 Options:
   --model MODEL              Model to evaluate: neumf, multivae, or all (default: neumf).
   --dataset DATASET          Dataset to evaluate: all, lastfm, or yelp (default: all).
+  --user-limit N             Number of sampled users (default: 1000).
+  --item-limit N             Number of sampled items (default: 1000).
   --cross-validation         Run user-stratified cross-validation.
   --hyperparameter-search    Search configurations from the model search YAML.
   --folds N                  Number of cross-validation folds (default: 5).
@@ -61,6 +65,25 @@ while (( $# > 0 )); do
             esac
             shift 2
             ;;
+        --user-limit | --item-limit)
+            if (( $# < 2 )); then
+                echo "Missing value for $1." >&2
+                exit 2
+            fi
+
+            if [[ ! "$2" =~ ^[1-9][0-9]*$ ]]; then
+                echo "$1 must be a positive integer." >&2
+                exit 2
+            fi
+
+            if [[ "$1" == "--user-limit" ]]; then
+                user_limit="$2"
+            else
+                item_limit="$2"
+            fi
+
+            shift 2
+            ;;
         --cross-validation | --hyperparameter-search)
             evaluation_arguments+=("$1")
             shift
@@ -94,6 +117,11 @@ if [[ -x ".venv/bin/python" ]]; then
 else
     python_command=("uv" "run" "python")
 fi
+
+evaluation_arguments+=(
+    --user-limit "$user_limit"
+    --item-limit "$item_limit"
+)
 
 case "$model" in
     neumf)

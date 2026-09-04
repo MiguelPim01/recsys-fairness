@@ -24,7 +24,7 @@ run_experiments:
 	./scripts/sample_datasets.sh all --user-limit $(USER_LIMIT) --item-limit $(ITEM_LIMIT)
 	
 	$(call yellow_heading,Running experiments)
-	$(call yellow_command,./scripts/evaluate_models.sh --model all --dataset all --cross-validation --hyperparameter-search --folds 5)
+	$(call yellow_command,./scripts/evaluate_models.sh --model all --dataset all --user-limit $(USER_LIMIT) --item-limit $(ITEM_LIMIT) --cross-validation --hyperparameter-search --folds 5)
 
 clean:
 	@echo "Cleaning processed and sampled data..."

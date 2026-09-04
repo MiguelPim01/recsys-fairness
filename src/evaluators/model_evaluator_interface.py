@@ -19,6 +19,7 @@ from src.utils.console import ConsoleColor, StyledFormatter, styled_tqdm
 from src.utils.results import generate_result_artifacts
 
 # ----- Config
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 LOGGER = logging.getLogger("recsys_fairness.evaluation")
 # -----
 
@@ -29,20 +30,15 @@ class IModelEvaluator:
     MODEL_CLASS = None
     HYPERPARAMETER_LABELS: ClassVar[dict] = {}
 
-    def __init__(self, dataset_dir, config_path, hp_search_config_path, cross_validation_splitter = None):
+    def __init__(self, dataset_dir, user_limit, item_limit, config_path, hp_search_config_path, cross_validation_splitter = None):
         self.dataset_dir = Path(dataset_dir)
         self.config_path = Path(config_path)
         self.hp_search_config_path = Path(hp_search_config_path)
         self.cross_validation_splitter = cross_validation_splitter
+        self.user_limit = user_limit
+        self.item_limit = item_limit
 
-    def evaluate(
-        self,
-        cross_validation=False,
-        hyperparameter_search=False,
-        n_splits=5,
-        estimate_runtime=False,
-        dataset_count=1,
-    ):
+    def evaluate(self, cross_validation=False, hyperparameter_search=False, n_splits=5, estimate_runtime=False, dataset_count=1):
         """
         Evaluate the model.
 
@@ -400,12 +396,16 @@ class IModelEvaluator:
         
         # patch will make Config RecBole consider that there is no argv
         with patch.object(sys, "argv", [sys.argv[0]]):
-            return Config(
+            config = Config(
                 model=self.MODEL_NAME,
                 dataset=self.dataset_dir.name,
                 config_file_list=[str(self.config_path)],
                 config_dict=config_dict,
             )
+        
+        config["fairness"]["output_dir"] = str(self.results_dir)
+        
+        return config
 
     @classmethod
     def _create_model_and_trainer(cls, config: Config, train_data):
@@ -594,3 +594,9 @@ class IModelEvaluator:
         LOGGER.propagate = False
         
         warnings.filterwarnings("ignore", category=FutureWarning, module=r"recbole\..*")
+    
+    @property
+    def results_dir(self) -> Path:
+        return REPOSITORY_ROOT / "results" / (
+            f"{self.user_limit}_{self.item_limit}"
+        )
