@@ -1,4 +1,5 @@
 import csv
+import random
 from collections import Counter
 from pathlib import Path
 
@@ -6,7 +7,7 @@ from src.utils.console import styled_tqdm
 
 
 class IDatasetSampler:
-    """Create a deterministic user-item sample from RecBole atomic files."""
+    """Create a reproducible user-item sample from RecBole atomic files."""
 
     DATASET_NAME = None
 
@@ -32,7 +33,7 @@ class IDatasetSampler:
         self.minimum_user_interactions = minimum_user_interactions
 
     def create_sample(self):
-        """Select the most popular items and the most active eligible users."""
+        """Select popular items and random eligible users."""
         interaction_path = self.source_dir / f"{self.DATASET_NAME}.inter"
         user_path = self.source_dir / f"{self.DATASET_NAME}.user"
         item_path = self.source_dir / f"{self.DATASET_NAME}.item"
@@ -150,9 +151,8 @@ class IDatasetSampler:
             interaction_total: Total number of interactions in the file.
 
         Returns:
-            Dictionary mapping eligible user IDs to their global interaction counts.
+            Set containing eligible user IDs.
         """
-        global_user_interactions = Counter()
         sample_user_interactions = Counter()
 
         with interaction_path.open(encoding="utf-8", newline="") as input_file:
@@ -168,23 +168,22 @@ class IDatasetSampler:
             )
             for row in progress:
                 self._validate_row(row, interaction_path, minimum_columns=2)
-                global_user_interactions[row[0]] += 1
 
                 if row[1] in selected_items:
                     sample_user_interactions[row[0]] += 1
 
         return {
-            user_id: global_user_interactions[user_id]
+            user_id
             for user_id, interaction_count in sample_user_interactions.items()
             if interaction_count >= self.minimum_user_interactions
         }
 
     def _select_users(self, eligible_users):
         """
-        Selects the most active eligible users.
+        Randomly selects eligible users.
 
         Args:
-            eligible_users: Dictionary mapping user IDs to interaction counts.
+            eligible_users: Set containing eligible user IDs.
 
         Returns:
             Set containing the selected user IDs.
@@ -195,12 +194,13 @@ class IDatasetSampler:
                 f"{self.user_limit} are required"
             )
 
-        ranked_users = sorted(
-            eligible_users,
-            key=lambda user_id: (-eligible_users[user_id], user_id),
+        random_generator = random.Random(self.seed)
+        return set(
+            random_generator.sample(
+                sorted(eligible_users),
+                self.user_limit,
+            )
         )
-
-        return set(ranked_users[:self.user_limit])
 
     def _write_interactions(
         self,
