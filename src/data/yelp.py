@@ -1,6 +1,7 @@
 import csv
 import json
 import math
+import unicodedata
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,13 +30,50 @@ class YelpTransformDataset:
     """Transform the Yelp Open Dataset into RecBole atomic files."""
 
     REVIEWS_FILENAME = "yelp_academic_dataset_review.json"
+    TIPS_FILENAME = "yelp_academic_dataset_tip.json"
     USERS_FILENAME = "yelp_academic_dataset_user.json"
     BUSINESSES_FILENAME = "yelp_academic_dataset_business.json"
     DAYS_PER_YEAR = 365.2425
+    RESTAURANT_CATEGORIES = {  # noqa: RUF012
+        "restaurant",
+        "restaurants",
+        "food",
+        "coffee",
+        "tea",
+        "coffee & tea",
+        "bakery",
+        "bakeries",
+        "pizza",
+        "burger",
+        "burgers",
+        "mexican",
+        "italian",
+        "chinese",
+        "japanese",
+        "sushi",
+        "sushi bars",
+        "breakfast",
+        "brunch",
+        "breakfast & brunch",
+        "sandwich",
+        "sandwiches",
+        "barbeque",
+        "barbecue",
+        "bbq",
+        "seafood",
+        "salad",
+        "dessert",
+        "desserts",
+        "ice cream",
+        "ice cream & frozen yogurt",
+        "cafe",
+        "cafes",
+    }
 
-    def __init__(self, raw_dir, output_dir):
+    def __init__(self, raw_dir, output_dir, use_restaurants_users_only=False):
         self.raw_dir = Path(raw_dir)
         self.output_dir = Path(output_dir)
+        self.use_restaurants_users_only = use_restaurants_users_only
 
     def transform(self):
         """
@@ -52,12 +90,23 @@ class YelpTransformDataset:
 
         activity_threshold, known_users, complete_users, total_users = self._activity_data(statistics)
         known_items = self._item_ids()
+
+        restaurant_preference_users = None
+        if self.use_restaurants_users_only:
+            restaurant_items = self._restaurant_item_ids()
+            restaurant_preference_users = self._restaurant_preference_users(
+                complete_users,
+                known_items,
+                restaurant_items,
+            )
+            statistics["restaurant_preference_users"] = len(restaurant_preference_users)
         
         # Transforms interactions
         users, items, reference_date = self._transform_interactions(
             known_users,
             complete_users,
             known_items,
+            restaurant_preference_users,
             statistics,
         )
         
@@ -78,7 +127,7 @@ class YelpTransformDataset:
         
         return dict(statistics)
 
-    def _transform_interactions(self, known_users, complete_users, known_items, statistics):
+    def _transform_interactions(self, known_users, complete_users, known_items, selected_users, statistics):
         """
         Writes down the interaction matrix.
             - user_id
@@ -90,6 +139,7 @@ class YelpTransformDataset:
             known_users (set[str]): The set of all user IDs in the dataset.
             complete_users (set[str]): User IDs with complete modeled metadata.
             known_items (set[str]): The set of all item IDs in the dataset.
+            selected_users (set[str] | None): User IDs selected by preference, if enabled.
             statistics (defaultdict): The statistics dictionary.
 
         Returns:
@@ -144,6 +194,9 @@ class YelpTransformDataset:
                 
                 if review["business_id"] not in known_items:
                     statistics["dropped_missing_item_interactions"] += 1
+                    continue
+
+                if selected_users is not None and review["user_id"] not in selected_users:
                     continue
 
                 interaction_id = (review["user_id"], review["business_id"])
@@ -238,12 +291,78 @@ class YelpTransformDataset:
         
         return item_ids
 
+    def _restaurant_item_ids(self):
+        """
+        Gathers the IDs of businesses categorized as restaurants or food.
+
+        Returns:
+            item_ids (set[str]): Restaurant and food business IDs.
+        """
+        input_path = self.raw_dir / self.BUSINESSES_FILENAME
+        item_ids = set()
+
+        with input_path.open(encoding="utf-8") as input_file:
+            for line in input_file:
+                business = json.loads(line)
+
+                if self._is_restaurant_business(business.get("categories")):
+                    item_ids.add(business["business_id"])
+
+        return item_ids
+
+    def _restaurant_preference_users(self, complete_users, known_items, restaurant_items):
+        """
+        Selects users whose predominant preference is restaurants or food.
+
+        Args:
+            complete_users (set[str]): User IDs with complete modeled metadata.
+            known_items (set[str]): The set of all business IDs in the dataset.
+            restaurant_items (set[str]): Restaurant and food business IDs.
+
+        Returns:
+            users (set[str]): Users with more restaurant than non-restaurant interactions.
+        """
+        interaction_counts = defaultdict(lambda: [0, 0])
+
+        for filename, description in (
+            (self.REVIEWS_FILENAME, "  restaurant preference reviews"),
+            (self.TIPS_FILENAME, "  restaurant preference tips"),
+        ):
+            input_path = self.raw_dir / filename
+            total_interactions = self._line_count(input_path)
+
+            with input_path.open(encoding="utf-8") as input_file:
+                progress = styled_tqdm(
+                    input_file,
+                    total=total_interactions,
+                    desc=description,
+                    unit="interaction",
+                    dynamic_ncols=True,
+                )
+                for line in progress:
+                    interaction = json.loads(line)
+                    user_id = interaction["user_id"]
+                    item_id = interaction["business_id"]
+
+                    if user_id not in complete_users or item_id not in known_items:
+                        continue
+
+                    interaction_type = 0 if item_id in restaurant_items else 1
+                    interaction_counts[user_id][interaction_type] += 1
+
+        return {
+            user_id
+            for user_id, (restaurant_count, other_count) in interaction_counts.items()
+            if restaurant_count > other_count
+        }
+
     def _transform_users(self, interaction_users, reference_date, activity_threshold, total_users, statistics):
         """
         Writes down the user metadata.
             - user_id
             - is_active
             - friend_count
+            - fans
             - tenure_years
 
         Args:
@@ -266,6 +385,7 @@ class YelpTransformDataset:
                 "user_id:token",
                 "is_active:token",
                 "friend_count:float",
+                "fans:float",
                 "tenure_years:float",
             ])
 
@@ -290,7 +410,8 @@ class YelpTransformDataset:
                 writer.writerow([
                     user_id, 
                     is_active, 
-                    self._friend_count(user["friends"]), 
+                    self._friend_count(user["friends"]),
+                    int(user["fans"]),
                     tenure
                 ])
 
@@ -401,11 +522,12 @@ class YelpTransformDataset:
 
         try:
             review_count = int(user["review_count"])
+            fans = int(user["fans"])
             datetime.fromisoformat(yelping_since)
         except (KeyError, TypeError, ValueError):
             return False
 
-        return review_count >= 0
+        return review_count >= 0 and fans >= 0
 
     @staticmethod
     def _line_count(input_path) -> int:
@@ -431,4 +553,27 @@ class YelpTransformDataset:
         return " ".join(
             "_".join(cls._clean_token(category).split())
             for category in categories.split(",")
+        )
+
+    @classmethod
+    def _is_restaurant_business(cls, categories) -> bool:
+        if not categories:
+            return False
+
+        return any(
+            cls._normalized_category(category) in cls.RESTAURANT_CATEGORIES
+            for category in categories.split(",")
+        )
+
+    @classmethod
+    def _normalized_category(cls, category) -> str:
+        normalized = unicodedata.normalize(
+            "NFKD",
+            cls._clean_token(category).casefold(),
+        )
+
+        return "".join(
+            character
+            for character in normalized
+            if not unicodedata.combining(character)
         )

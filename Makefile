@@ -2,6 +2,9 @@
 
 USER_LIMIT ?= 1000
 ITEM_LIMIT ?= 1000
+USE_RESTAURANTS_USERS_ONLY ?= false
+
+YELP_TRANSFORM_ARGUMENTS = $(if $(filter true,$(USE_RESTAURANTS_USERS_ONLY)),--use-restaurants-users-only)
 
 define default_heading
 	@if [ -t 1 ] && [ -z "$${NO_COLOR+x}" ]; then printf '\033[1m%s\033[0m\n' "$(1)"; else printf '%s\n' "$(1)"; fi
@@ -18,7 +21,7 @@ endef
 
 run_experiments:
 	$(call default_heading,Transforming datasets)
-	./scripts/transform_datasets.sh all
+	./scripts/transform_datasets.sh all $(YELP_TRANSFORM_ARGUMENTS)
 
 	$(call default_heading,Sampling datasets)
 	./scripts/sample_datasets.sh all --user-limit $(USER_LIMIT) --item-limit $(ITEM_LIMIT)

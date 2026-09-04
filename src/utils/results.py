@@ -31,6 +31,7 @@ GROUPING_ORDER_BY_DATASET = {
     "yelp": (
         "activity",
         "friend_count",
+        "fans",
         "tenure",
         "kmeans",
         "agglomerative",
@@ -41,6 +42,7 @@ GROUPING_LABELS = {
     "age": "Age",
     "gender": "Gender",
     "friend_count": "Friends",
+    "fans": "Fans",
     "tenure": "Tenure",
     "kmeans": "K-Means",
     "agglomerative": "Agglomerative",
@@ -50,6 +52,7 @@ GROUPING_COLORS = {
     "age": "#9467bd",
     "gender": "#17becf",
     "friend_count": "#8c564b",
+    "fans": "#bcbd22",
     "tenure": "#e377c2",
     "kmeans": "#1f77b4",
     "agglomerative": "#2ca02c",
@@ -162,9 +165,10 @@ def _load_results(path: Path) -> DatasetResults:
         if dataset_name is None:
             dataset_name = current_dataset
             try:
-                grouping_order = GROUPING_ORDER_BY_DATASET[
-                    current_dataset.casefold()
-                ]
+                grouping_order = _available_grouping_order(
+                    current_dataset,
+                    raw_models,
+                )
             except KeyError as error:
                 raise ValueError(
                     f"Unsupported results dataset: {current_dataset}"
@@ -443,6 +447,23 @@ def _model_sort_key(model_name: str):
     return (MODEL_PRIORITY.get(model_name, len(MODEL_PRIORITY)), model_name.casefold())
 
 
+def _available_grouping_order(dataset_name: str, raw_models: dict[str, Any]):
+    grouping_order = GROUPING_ORDER_BY_DATASET[dataset_name.casefold()]
+    if dataset_name.casefold() != "yelp":
+        return grouping_order
+
+    has_fans = all(
+        isinstance(model, dict)
+        and isinstance(model.get("groupings"), dict)
+        and "fans" in model["groupings"]
+        for model in raw_models.values()
+    )
+    if has_fans:
+        return grouping_order
+
+    return tuple(name for name in grouping_order if name != "fans")
+
+
 def _group_sort_key(grouping_name: str, group_name: str):
     predefined = {
         "activity": {"active": 0, "inactive": 1},
@@ -459,6 +480,12 @@ def _group_sort_key(grouping_name: str, group_name: str):
         "gender": {"male": 0, "female": 1, "unknown": 2},
         "friend_count": {
             "no_friends": 0,
+            "1_10": 1,
+            "11_100": 2,
+            "101_plus": 3,
+        },
+        "fans": {
+            "no_fans": 0,
             "1_10": 1,
             "11_100": 2,
             "101_plus": 3,
@@ -495,6 +522,7 @@ def _group_label(group_name: str) -> str:
         "50_55": "50–55",
         "over_55": ">55",
         "no_friends": "None",
+        "no_fans": "None",
         "1_10": "1–10",
         "11_100": "11–100",
         "101_plus": "101+",

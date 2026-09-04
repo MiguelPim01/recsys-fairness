@@ -1,5 +1,4 @@
 import csv
-import random
 from collections import Counter
 from pathlib import Path
 
@@ -7,7 +6,7 @@ from src.utils.console import styled_tqdm
 
 
 class IDatasetSampler:
-    """Create a reproducible user-item sample from RecBole atomic files."""
+    """Create a deterministic user-item sample from RecBole atomic files."""
 
     DATASET_NAME = None
 
@@ -33,7 +32,7 @@ class IDatasetSampler:
         self.minimum_user_interactions = minimum_user_interactions
 
     def create_sample(self):
-        """Select popular items and random eligible users."""
+        """Select the most popular items and the most active eligible users."""
         interaction_path = self.source_dir / f"{self.DATASET_NAME}.inter"
         user_path = self.source_dir / f"{self.DATASET_NAME}.user"
         item_path = self.source_dir / f"{self.DATASET_NAME}.item"
@@ -93,12 +92,16 @@ class IDatasetSampler:
                 f"Missing profiles for {len(missing_items)} sampled items"
             )
 
+        matrix_size = len(selected_users) * len(selected_items)
+        density = interaction_count / matrix_size * 100
+
         return {
             "source_interactions": source_interactions,
             "eligible_users": len(eligible_users),
             "selected_users": len(selected_users),
             "selected_items": len(selected_items),
             "sample_interactions": interaction_count,
+            "density": f"{density:.4f}%",
             "items_without_interactions": len(selected_items - interacted_items),
             "seed": self.seed,
             "minimum_user_interactions": self.minimum_user_interactions,
@@ -137,13 +140,20 @@ class IDatasetSampler:
 
         return set(ranked_items[:self.item_limit]), interaction_count
 
-    def _eligible_users(
-        self,
-        interaction_path,
-        selected_items,
-        interaction_total,
-    ):
-        user_interactions = Counter()
+    def _eligible_users(self, interaction_path, selected_items, interaction_total):
+        """
+        Finds users with enough interactions among the selected items.
+
+        Args:
+            interaction_path: Path to the RecBole interaction file.
+            selected_items: Set containing the selected item IDs.
+            interaction_total: Total number of interactions in the file.
+
+        Returns:
+            Dictionary mapping eligible user IDs to their global interaction counts.
+        """
+        global_user_interactions = Counter()
+        sample_user_interactions = Counter()
 
         with interaction_path.open(encoding="utf-8", newline="") as input_file:
             reader = csv.reader(input_file, delimiter="\t")
@@ -158,29 +168,39 @@ class IDatasetSampler:
             )
             for row in progress:
                 self._validate_row(row, interaction_path, minimum_columns=2)
+                global_user_interactions[row[0]] += 1
+
                 if row[1] in selected_items:
-                    user_interactions[row[0]] += 1
+                    sample_user_interactions[row[0]] += 1
 
         return {
-            user_id
-            for user_id, interaction_count in user_interactions.items()
+            user_id: global_user_interactions[user_id]
+            for user_id, interaction_count in sample_user_interactions.items()
             if interaction_count >= self.minimum_user_interactions
         }
 
     def _select_users(self, eligible_users):
+        """
+        Selects the most active eligible users.
+
+        Args:
+            eligible_users: Dictionary mapping user IDs to interaction counts.
+
+        Returns:
+            Set containing the selected user IDs.
+        """
         if len(eligible_users) < self.user_limit:
             raise ValueError(
                 f"Dataset contains only {len(eligible_users)} eligible users; "
                 f"{self.user_limit} are required"
             )
 
-        random_generator = random.Random(self.seed)
-        return set(
-            random_generator.sample(
-                sorted(eligible_users),
-                self.user_limit,
-            )
+        ranked_users = sorted(
+            eligible_users,
+            key=lambda user_id: (-eligible_users[user_id], user_id),
         )
+
+        return set(ranked_users[:self.user_limit])
 
     def _write_interactions(
         self,

@@ -16,6 +16,7 @@ class UserProfile:
     age: float | None = None
     is_active: bool | None = None
     friend_count: float | None = None
+    fans: float | None = None
     tenure_years: float | None = None
 
 
@@ -76,6 +77,7 @@ def _yelp_metadata_partitions(
         if (
             profile.is_active is None
             or profile.friend_count is None
+            or profile.fans is None
             or profile.tenure_years is None
         ):
             raise ValueError(f"Incomplete Yelp profile for user {profile.user_id}")
@@ -86,6 +88,10 @@ def _yelp_metadata_partitions(
     }
     friend_count = {
         profile.user_id: _friend_count_group(profile.friend_count)
+        for profile in profiles
+    }
+    fans = {
+        profile.user_id: _fans_group(profile.fans)
         for profile in profiles
     }
     tenure = {
@@ -104,6 +110,7 @@ def _yelp_metadata_partitions(
             },
         ),
         "friend_count": Partition(friend_count, {"type": "metadata"}),
+        "fans": Partition(fans, {"type": "metadata"}),
         "tenure": Partition(tenure, {"type": "metadata"}),
     }
 
@@ -215,6 +222,7 @@ def _yelp_feature_matrix(profiles: list[UserProfile]) -> np.ndarray:
         if (
             profile.is_active is None
             or profile.friend_count is None
+            or profile.fans is None
             or profile.tenure_years is None
         ):
             raise ValueError(f"Incomplete Yelp profile for user {profile.user_id}")
@@ -223,6 +231,7 @@ def _yelp_feature_matrix(profiles: list[UserProfile]) -> np.ndarray:
             [
                 float(profile.is_active),
                 math.log1p(profile.friend_count),
+                math.log1p(profile.fans),
                 profile.tenure_years,
                 math.log1p(profile.development_interactions),
             ]
@@ -281,6 +290,16 @@ def _friend_count_group(friend_count: float) -> str:
     if friend_count <= 10:
         return "1_10"
     if friend_count <= 100:
+        return "11_100"
+    return "101_plus"
+
+
+def _fans_group(fans: float) -> str:
+    if fans == 0:
+        return "no_fans"
+    if fans <= 10:
+        return "1_10"
+    if fans <= 100:
         return "11_100"
     return "101_plus"
 

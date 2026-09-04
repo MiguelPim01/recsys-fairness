@@ -11,7 +11,7 @@ RATING_FIELD: rating
 LABEL_FIELD: rating
 load_col:
   inter: [user_id, item_id, rating]
-  user: [user_id, is_active, friend_count, tenure_years]
+  user: [user_id, is_active, friend_count, fans, tenure_years]
   item: [item_id]
 
 epochs: 50

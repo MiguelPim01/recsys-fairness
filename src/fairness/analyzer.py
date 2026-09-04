@@ -69,6 +69,7 @@ class GroupFairnessAnalyzer:
                     age=raw_profile.get("age"),
                     is_active=raw_profile.get("is_active"),
                     friend_count=raw_profile.get("friend_count"),
+                    fans=raw_profile.get("fans"),
                     tenure_years=raw_profile.get("tenure_years"),
                 )
             )
@@ -249,6 +250,7 @@ class GroupFairnessAnalyzer:
             "user_id:token",
             "is_active:token",
             "friend_count:float",
+            "fans:float",
             "tenure_years:float",
         }
         if reader.fieldnames is None or not required_fields.issubset(
@@ -266,10 +268,13 @@ class GroupFairnessAnalyzer:
                 )
 
             friend_count = float(row["friend_count:float"])
+            fans = float(row["fans:float"])
             tenure_years = float(row["tenure_years:float"])
             if (
                 not math.isfinite(friend_count)
                 or friend_count < 0
+                or not math.isfinite(fans)
+                or fans < 0
                 or not math.isfinite(tenure_years)
                 or tenure_years < 0
             ):
@@ -278,6 +283,7 @@ class GroupFairnessAnalyzer:
             profiles[user_id] = {
                 "is_active": raw_is_active == "true",
                 "friend_count": friend_count,
+                "fans": fans,
                 "tenure_years": tenure_years,
             }
         return profiles

@@ -18,15 +18,15 @@ case "$dataset" in
         exec uv run python -m src.scripts.datasets.yelp_transform "$@"
         ;;
     all)
-        if (( $# > 0 )); then
-            echo "The 'all' option does not accept transformer arguments." >&2
+        if (( $# > 1 )) || (( $# == 1 )) && [[ "$1" != "--use-restaurants-users-only" ]]; then
+            echo "The 'all' option only accepts --use-restaurants-users-only." >&2
             exit 2
         fi
         uv run python -m src.scripts.datasets.lastfm_transform
-        uv run python -m src.scripts.datasets.yelp_transform
+        uv run python -m src.scripts.datasets.yelp_transform "$@"
         ;;
     *)
-        echo "Usage: $0 [lastfm|yelp|all] [transformer arguments]" >&2
+        echo "Usage: $0 [lastfm|yelp|all] [--use-restaurants-users-only] [transformer arguments]" >&2
         exit 2
         ;;
 esac

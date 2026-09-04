@@ -32,6 +32,12 @@ make run_experiments
 
 This will run the experiment pipeline for all models and datasets.
 
+To restrict the Yelp dataset to users whose predominant preference is restaurants or food, run:
+
+```bash
+make run_experiments USE_RESTAURANTS_USERS_ONLY=true
+```
+
 You can also run each script separately.
 
 ### Run separately
@@ -44,6 +50,7 @@ You can also run each script separately.
 ```
 Possible flags:
    - `dataset`: The dataset to transform [`all`|`lastfm`|`yelp`]. Defaults to `all`.
+   - `--use-restaurants-users-only`: Keep only Yelp users whose predominant preference is restaurants or food. Supported by `yelp` and `all`.
 
 2. **Run the following script for sampling the dataset**:
 
