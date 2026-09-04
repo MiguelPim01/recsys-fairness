@@ -2,24 +2,31 @@ configurations:
   - learning_rate: 0.0005
     dropout_prob: 0.3
     latent_dimension: 128
+
   - learning_rate: 0.0005
     dropout_prob: 0.3
     latent_dimension: 200
+
   - learning_rate: 0.0005
     dropout_prob: 0.5
     latent_dimension: 128
+
   - learning_rate: 0.0005
     dropout_prob: 0.5
     latent_dimension: 200
+
   - learning_rate: 0.001
     dropout_prob: 0.3
     latent_dimension: 128
+
   - learning_rate: 0.001
     dropout_prob: 0.3
     latent_dimension: 200
+
   - learning_rate: 0.001
     dropout_prob: 0.5
     latent_dimension: 128
+    
   - learning_rate: 0.001
     dropout_prob: 0.5
     latent_dimension: 200

@@ -1,33 +1,40 @@
 configurations:
   - learning_rate: 0.0005
-    dropout_prob: 0.0
+    mlp_hidden_size: [64, 32, 16]
     mf_embedding_size: 32
     mlp_embedding_size: 32
+
   - learning_rate: 0.0005
-    dropout_prob: 0.0
+    mlp_hidden_size: [64, 32, 16]
     mf_embedding_size: 64
     mlp_embedding_size: 64
+
   - learning_rate: 0.0005
-    dropout_prob: 0.2
+    mlp_hidden_size: [128, 64]
     mf_embedding_size: 32
     mlp_embedding_size: 32
+
   - learning_rate: 0.0005
-    dropout_prob: 0.2
+    mlp_hidden_size: [128, 64]
     mf_embedding_size: 64
     mlp_embedding_size: 64
+
   - learning_rate: 0.001
-    dropout_prob: 0.0
+    mlp_hidden_size: [64, 32, 16]
     mf_embedding_size: 32
     mlp_embedding_size: 32
+
   - learning_rate: 0.001
-    dropout_prob: 0.0
+    mlp_hidden_size: [64, 32, 16]
     mf_embedding_size: 64
     mlp_embedding_size: 64
+
   - learning_rate: 0.001
-    dropout_prob: 0.2
+    mlp_hidden_size: [128, 64]
     mf_embedding_size: 32
     mlp_embedding_size: 32
+
   - learning_rate: 0.001
-    dropout_prob: 0.2
+    mlp_hidden_size: [128, 64]
     mf_embedding_size: 64
     mlp_embedding_size: 64
