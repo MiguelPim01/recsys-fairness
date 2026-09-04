@@ -21,9 +21,10 @@ eval_args:
     valid: labeled    
     test: labeled
 
-metrics: [RMSE, MAE]
-valid_metric: RMSE
-valid_metric_bigger: false
+metrics: [Recall, NDCG, MRR]
+topk: [5, 10, 20]
+valid_metric: NDCG@10
+valid_metric_bigger: true
 train_neg_sample_args: ~
 
 epochs: 100
