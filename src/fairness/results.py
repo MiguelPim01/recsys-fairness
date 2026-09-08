@@ -4,7 +4,6 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -13,13 +12,24 @@ class ResultsStore:
 
     def __init__(self, output_dir: str | Path):
         output_dir = Path(output_dir)
-        self.output_dir = (
-            output_dir if output_dir.is_absolute() else REPOSITORY_ROOT / output_dir
-        )
+        self.output_dir = output_dir if output_dir.is_absolute() else REPOSITORY_ROOT / output_dir
 
-    def update(self, dataset: str, algorithm: str, analysis: dict[str, Any]) -> Path:
+    def update(self, dataset: str, algorithm: str, analysis: dict[str, Any]):
+        """
+        Update the results file for a given dataset with the analysis results of a specific algorithm.
+
+        Args:
+            dataset: Dataset name.
+            algorithm: Algorithm name.
+            analysis: Analysis results to be added to the results file.
+
+        Returns:
+            output_path: Path to the updated results file.
+        """
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        
         output_path = self.output_dir / f"results_{dataset}.json"
+        
         document = self._read(output_path)
         document["results"][algorithm] = analysis
 
@@ -34,6 +44,7 @@ class ResultsStore:
                 delete=False,
             ) as output_file:
                 temporary_path = Path(output_file.name)
+                
                 json.dump(
                     document,
                     output_file,
@@ -41,8 +52,10 @@ class ResultsStore:
                     sort_keys=True,
                     allow_nan=False,
                 )
+                
                 output_file.write("\n")
                 output_file.flush()
+                
                 os.fsync(output_file.fileno())
 
             os.replace(temporary_path, output_path)
@@ -54,16 +67,11 @@ class ResultsStore:
         return output_path
 
     @staticmethod
-    def _read(path: Path) -> dict[str, Any]:
+    def _read(path: Path):
         if not path.exists():
             return {"results": {}}
 
         with path.open(encoding="utf-8") as input_file:
             document = json.load(input_file)
-
-        if not isinstance(document, dict) or not isinstance(
-            document.get("results"), dict
-        ):
-            raise ValueError(f"Invalid results document: {path}")
 
         return document
