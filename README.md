@@ -27,16 +27,15 @@ uv sync
 
 You can run all the experiments with the command:
 ```bash
-make run_experiments
+make run_experiments USER_LIMIT=<N> ITEM_LIMIT=<M> USE_RESTAURANTS_USERS_ONLY=<flag>
 ```
+
+Possible flag values:
+- `USER_LIMIT`: Quantity of users to be used for experimenting. Defaults to 1000.
+- `ITEM_LIMIT`: Quantity of items to be used for experimenting. Defaults to 1000.
+- `USE_RESTAURANTS_USERS_ONLY`: Wether to use only users that have a strong preference for restaurants. Defaults to false.
 
 This will run the experiment pipeline for all models and datasets.
-
-To restrict the Yelp dataset to users whose predominant preference is restaurants or food, run:
-
-```bash
-make run_experiments USE_RESTAURANTS_USERS_ONLY=true
-```
 
 You can also run each script separately.
 
@@ -46,7 +45,7 @@ You can also run each script separately.
 
 1. **Run the following command to transform the datasets into RecBole format**:
 ```bash
-./scripts/transform_datasets.sh <dataset>
+./scripts/transform_datasets.sh <dataset> --use-restaurants-users-only
 ```
 Possible flags:
    - `dataset`: The dataset to transform [`all`|`lastfm`|`yelp`]. Defaults to `all`.
@@ -73,14 +72,6 @@ Possible flags:
 - `--cross-validation`: Run user-stratified cross-validation.
 - `--hyperparameter-search`: Search configurations from the model search YAML.
 - `--folds`: Number of cross-validation folds. Defaults to `5`.
-
-Examples for selecting models:
-
-```bash
-./scripts/evaluate_models.sh --model neumf --dataset lastfm
-./scripts/evaluate_models.sh --model multivae --dataset yelp
-./scripts/evaluate_models.sh --model all --dataset all
-```
 
 All results will be persisted in files `results/results_<dataset>.json`. Graphics and data tables are persisted in folders `results/<dataset>/`.
 

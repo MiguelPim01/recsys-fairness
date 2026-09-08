@@ -3,7 +3,7 @@ import random
 from collections import Counter
 from pathlib import Path
 
-from src.utils.console import styled_tqdm
+from tqdm.auto import tqdm
 
 
 class IDatasetSampler:
@@ -118,7 +118,7 @@ class IDatasetSampler:
             reader = csv.reader(input_file, delimiter="\t")
             self._require_header(reader, interaction_path)
 
-            progress = styled_tqdm(reader, total=interaction_total, desc="  ranking items", unit="interaction", dynamic_ncols=True)
+            progress = tqdm(reader, total=interaction_total, desc="  ranking items", unit="interaction", dynamic_ncols=True)
             for row in progress:
                 self._validate_row(row, interaction_path, minimum_columns=2)
                 item_interactions[row[1]] += 1
@@ -150,7 +150,7 @@ class IDatasetSampler:
             reader = csv.reader(input_file, delimiter="\t")
             self._require_header(reader, interaction_path)
 
-            progress = styled_tqdm(reader, total=interaction_total, desc="  finding users", unit="interaction", dynamic_ncols=True)
+            progress = tqdm(reader, total=interaction_total, desc="  finding users", unit="interaction", dynamic_ncols=True)
             for row in progress:
                 self._validate_row(row, interaction_path, minimum_columns=2)
 
@@ -206,7 +206,7 @@ class IDatasetSampler:
             
             writer.writerow(self._require_header(reader, source_path))
 
-            progress = styled_tqdm(reader, total=interaction_total, desc="  interactions", unit="interaction", dynamic_ncols=True)
+            progress = tqdm(reader, total=interaction_total, desc="  interactions", unit="interaction", dynamic_ncols=True)
             for row in progress:
                 self._validate_row(row, source_path, minimum_columns=2)
                 if row[0] not in selected_users or row[1] not in selected_items:
@@ -243,7 +243,7 @@ class IDatasetSampler:
             header = next(reader, None)
             writer.writerow(header)
 
-            progress = styled_tqdm(reader, total=entity_total, desc=f"  {description}", unit=description[:-1], dynamic_ncols=True)
+            progress = tqdm(reader, total=entity_total, desc=f"  {description}", unit=description[:-1], dynamic_ncols=True)
             for row in progress:
                 if row[0] in selected_ids:
                     writer.writerow(row)

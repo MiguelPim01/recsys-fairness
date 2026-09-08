@@ -2,7 +2,6 @@ import argparse
 from pathlib import Path
 
 from src.sampler.lastfm_sampler import LastFMSampler
-from src.utils.console import styled_print
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -34,8 +33,10 @@ def parse_arguments():
 
 def main():
     arguments = parse_arguments()
-
-    styled_print("Sampling the LastFM dataset...", bold=True)
+    
+    print("=" * 70)
+    print("= 3. Sampling the LastFM dataset")
+    print("=" * 70 + "\n")
 
     sampler = LastFMSampler(
         source_dir=arguments.source_dir,
@@ -47,12 +48,10 @@ def main():
     )
     statistics = sampler.create_sample()
 
-    styled_print(
-        f"\nLastFM sample created in {arguments.output_dir.resolve()}",
-        bold=True,
-    )
+    print(f"\nLastFM sample created in {arguments.output_dir.resolve()}")
+    
     for name, value in statistics.items():
-        styled_print(f"{name}: {value}")
+        print(f"\t - {name}: {value}")
     print()
 
 

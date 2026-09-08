@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.utils.console import styled_tqdm
+from tqdm.auto import tqdm
 
 # ----- Config
 STATISTICS = [
@@ -144,7 +144,7 @@ class YelpTransformDataset:
                 "timestamp:float"
             ])
 
-            progress = styled_tqdm(
+            progress = tqdm(
                 input_file,
                 total=total_interactions,
                 desc="  interactions",
@@ -308,7 +308,7 @@ class YelpTransformDataset:
             total_interactions = self._line_count(input_path)
 
             with input_path.open(encoding="utf-8") as input_file:
-                progress = styled_tqdm(
+                progress = tqdm(
                     input_file,
                     total=total_interactions,
                     desc=description,
@@ -365,7 +365,7 @@ class YelpTransformDataset:
                 "tenure_years:float",
             ])
 
-            progress = styled_tqdm(
+            progress = tqdm(
                 input_file,
                 total=total_users,
                 desc="  users",
@@ -443,7 +443,7 @@ class YelpTransformDataset:
                 "categories:token_seq",
             ])
 
-            progress = styled_tqdm(
+            progress = tqdm(
                 input_file,
                 total=total_items,
                 desc="  items",

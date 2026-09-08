@@ -13,9 +13,9 @@ import yaml
 from recbole.config import Config
 from recbole.data import create_dataset, data_preparation
 from recbole.utils import get_model, get_trainer, init_seed
+from tqdm.auto import tqdm
 
 from src.fairness import GroupFairnessAnalyzer
-from src.utils.console import ConsoleColor, StyledFormatter, styled_tqdm
 from src.utils.results import generate_result_artifacts
 
 # ----- Config
@@ -99,9 +99,8 @@ class IModelEvaluator:
             
             fold_results = []
             
-            progress = styled_tqdm(
+            progress = tqdm(
                 fold_indexes,
-                ConsoleColor.YELLOW,
                 desc="  folds",
                 unit="fold",
                 dynamic_ncols=True,
@@ -116,11 +115,10 @@ class IModelEvaluator:
                 )
 
                 if estimate_runtime and first_training_run:
-                    elapsed_hours = (
-                        time.perf_counter() - start_time
-                    ) * total_training_runs / 3600
+                    elapsed_hours = (time.perf_counter() - start_time) * total_training_runs / 3600
+                    
                     LOGGER.info(
-                        "Estimativa de duração do %s: %.2f horas (%d treinos)\n",
+                        "\n --> Estimativa de duração do %s: %.2f horas (%d treinos)\n",
                         self.MODEL_NAME,
                         elapsed_hours,
                         total_training_runs,
@@ -156,16 +154,17 @@ class IModelEvaluator:
             bigger=base_config["valid_metric_bigger"],
         )
         
+        LOGGER.info("Selected Hyperparameters:")
+        LOGGER.info("  --> %s", self._format_hyperparameters(best_candidate["hyperparameters"]))
         LOGGER.info(
-            "Selected | %s | %s %.4f ± %.4f\n",
-            self._format_hyperparameters(best_candidate["hyperparameters"]),
+            "  --> %s = %.4f ± %.4f\n", 
             validation_metric,
             best_candidate["mean_score"],
-            best_candidate["std_score"],
+            best_candidate["std_score"]
         )
 
         # 3. Final evaluation: trains model with development data and evaluates on test data.
-        test_result, analysis, results_path = self._train_development_and_evaluate_test(
+        test_result, analysis, _ = self._train_development_and_evaluate_test(
             splitter.final_benchmark(),
             best_candidate["hyperparameters"],
             best_candidate["median_epoch"],
@@ -183,10 +182,7 @@ class IModelEvaluator:
             "analysis": analysis,
         }
         
-        LOGGER.info("Test | %s", self._format_metrics(test_result))
-        
-        if results_path is not None:
-            LOGGER.info("Fairness results | %s", results_path)
+        LOGGER.info("Test Results: \n  --> %s\n", self._format_metrics(test_result))
         
         return results
 
@@ -353,7 +349,7 @@ class IModelEvaluator:
         _, trainer = self._create_model_and_trainer(config, train_data)
 
         LOGGER.info(
-            "Final training on all development interactions | %d epoch(s)",
+            "Starting final evaluation on test set | %d epoch(s)",
             epochs,
         )
         
@@ -478,9 +474,7 @@ class IModelEvaluator:
             recbole_metrics=test_result,
         )
 
-        artifacts = generate_result_artifacts(results_path)
-        
-        LOGGER.info("Result artifacts | %s", next(iter(artifacts.values())).parent)
+        _ = generate_result_artifacts(results_path)
         
         return analysis, results_path
 
@@ -581,9 +575,7 @@ class IModelEvaluator:
         LOGGER.handlers.clear()
         
         handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(
-            StyledFormatter(ConsoleColor.YELLOW, sys.stdout, fmt="%(message)s")
-        )
+        handler.setFormatter(logging.Formatter("%(message)s"))
         
         LOGGER.addHandler(handler)
         

@@ -4,7 +4,6 @@ from pathlib import Path
 from src.evaluators.multivae_evaluator import MultiVAEEvaluator
 from src.splitters.lastfm_cross_val import LastFMCrossValidationSplitter
 from src.splitters.yelp_cross_val import YelpCrossValidationSplitter
-from src.utils.console import ConsoleColor, styled_print
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -73,19 +72,15 @@ def parse_arguments():
 def main():
     arguments = parse_arguments()
 
-    hyperparameter_config_path = (
-        REPOSITORY_ROOT / "config/hyperparameters/multivae.yaml"
-    )
+    hyperparameter_config_path = REPOSITORY_ROOT / "config/hyperparameters/multivae.yaml"
     dataset_names = DATASETS if arguments.dataset == "all" else (arguments.dataset,)
 
     for dataset_index, dataset_name in enumerate(dataset_names):
         settings = DATASETS[dataset_name]
-
-        styled_print(
-            f"===== EVALUATING MultiVAE ON {dataset_name.upper()} =====",
-            ConsoleColor.YELLOW,
-            bold=True,
-        )
+        
+        print("=" * 70)
+        print(f"= {dataset_index + 7}. EVALUATING MultiVAE ON {dataset_name.upper()}")
+        print("=" * 70 + "\n")
 
         dataset_dir = REPOSITORY_ROOT / "data/sample" / dataset_name
         config_path = REPOSITORY_ROOT / "config/models" / settings["config"]

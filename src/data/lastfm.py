@@ -3,7 +3,7 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-from src.utils.console import styled_tqdm
+from tqdm.auto import tqdm
 
 # ----- Config
 STATISTICS = [
@@ -99,7 +99,7 @@ class LastFMTransformDataset:
                 "play_count:float"
             ])
 
-            progress = styled_tqdm(
+            progress = tqdm(
                 reader,
                 total=total_interactions,
                 desc="  interactions",
@@ -240,7 +240,7 @@ class LastFMTransformDataset:
                 "signup_date:token",
             ])
 
-            progress = styled_tqdm(
+            progress = tqdm(
                 reader,
                 total=total_users,
                 desc="  users",
@@ -295,7 +295,7 @@ class LastFMTransformDataset:
             ])
 
             # Writing item profiles
-            progress = styled_tqdm(
+            progress = tqdm(
                 items.items(),
                 total=len(items),
                 desc="  items",

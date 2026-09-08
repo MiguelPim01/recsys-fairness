@@ -23,8 +23,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Patch
 
-from src.utils.console import ConsoleColor, styled_print
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 GROUPING_ORDER_BY_DATASET = {
     "lastfm": ("activity", "age", "gender", "kmeans", "agglomerative"),
@@ -583,7 +581,7 @@ def main() -> None:
     )
     paths = generate_result_artifacts(input_path, output_dir)
     for name, path in paths.items():
-        styled_print(f"{name}: {path}", ConsoleColor.YELLOW)
+        print(f"{name}: {path}")
 
 
 if __name__ == "__main__":

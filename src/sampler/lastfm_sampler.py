@@ -2,8 +2,9 @@ import csv
 import math
 from pathlib import Path
 
+from tqdm.auto import tqdm
+
 from src.sampler.dataset_sampler_interface import IDatasetSampler
-from src.utils.console import styled_tqdm
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
@@ -31,7 +32,7 @@ class LastFMSampler(IDatasetSampler):
             reader = csv.reader(input_file, delimiter="\t")
             self._require_header(reader, source_path)
 
-            progress = styled_tqdm(reader, total=interaction_total, desc="  interactions", unit="interaction", dynamic_ncols=True)
+            progress = tqdm(reader, total=interaction_total, desc="  interactions", unit="interaction", dynamic_ncols=True)
             for row in progress:
                 self._validate_row(row, source_path, minimum_columns=3)
                 if row[0] not in selected_users or row[1] not in selected_items:
