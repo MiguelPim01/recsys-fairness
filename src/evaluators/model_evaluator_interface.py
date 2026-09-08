@@ -467,6 +467,7 @@ class IModelEvaluator:
             algorithm=self.MODEL_NAME,
             config=config,
         )
+        
         analysis, results_path = analyzer.analyze(
             trainer=trainer,
             test_data=test_data,
