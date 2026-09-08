@@ -23,10 +23,30 @@ def parse_arguments():
         default=REPOSITORY_ROOT / "data/sample/lastfm",
         help="Directory where the sampled atomic files will be written.",
     )
-    parser.add_argument("--user-limit", type=int, default=1000)
-    parser.add_argument("--item-limit", type=int, default=1000)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--minimum-user-interactions", type=int, default=6)
+    
+    parser.add_argument(
+        "--user-limit", 
+        type=int, 
+        default=1000
+    )
+    
+    parser.add_argument(
+        "--item-limit", 
+        type=int, 
+        default=1000
+    )
+    
+    parser.add_argument(
+        "--seed", 
+        type=int, 
+        default=42
+    )
+    
+    parser.add_argument(
+        "--minimum-user-interactions", 
+        type=int, 
+        default=6
+    )
 
     return parser.parse_args()
 
