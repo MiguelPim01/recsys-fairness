@@ -24,7 +24,11 @@ class ICrossValidationSplitter:
     def prepare(self):
         """
         Generate the split files, or reuse them when the manifest matches.
+
+        Returns:
+            statistics: A dictionary containing the statistics of the split.
         """
+        # 1. Check for existing manifest and validate it
         source_hash = self._sha256(self.interaction_path)
         expected_files = self._expected_files()
 
@@ -32,35 +36,22 @@ class ICrossValidationSplitter:
         if self._can_reuse(manifest, source_hash, expected_files):
             return {**manifest["statistics"], "reused": True}
 
+        # 2. Read interactions and split them into development and test sets
         header, interactions_by_user = self._read_interactions()
         development_rows, test_rows, validation_fold_by_row = self._split_by_user(interactions_by_user)
 
+        # 3. Write split files.
         self._write_atomic_file(self.dataset_dir / f"{self.DATASET_NAME}.development.inter", header, development_rows)
         self._write_atomic_file(self.dataset_dir / f"{self.DATASET_NAME}.test.inter", header, test_rows)
         self._write_atomic_file(self.dataset_dir / f"{self.DATASET_NAME}.empty.inter", header, [])
 
+        # 4. Write fold files.
         for fold in range(self.n_splits):
-            train_rows = [
-                row
-                for row, validation_fold in validation_fold_by_row
-                if validation_fold != fold
-            ]
-            valid_rows = [
-                row
-                for row, validation_fold in validation_fold_by_row
-                if validation_fold == fold
-            ]
+            train_rows = [row for row, validation_fold in validation_fold_by_row if validation_fold != fold]
+            valid_rows = [row for row, validation_fold in validation_fold_by_row if validation_fold == fold]
             
-            self._write_atomic_file(
-                self.dataset_dir / f"{self.DATASET_NAME}.fold{fold}_train.inter",
-                header,
-                train_rows,
-            )
-            self._write_atomic_file(
-                self.dataset_dir / f"{self.DATASET_NAME}.fold{fold}_valid.inter",
-                header,
-                valid_rows,
-            )
+            self._write_atomic_file(self.dataset_dir / f"{self.DATASET_NAME}.fold{fold}_train.inter", header, train_rows)
+            self._write_atomic_file(self.dataset_dir / f"{self.DATASET_NAME}.fold{fold}_valid.inter", header, valid_rows)
 
         statistics = {
             "users": len(interactions_by_user),
@@ -77,7 +68,7 @@ class ICrossValidationSplitter:
         return [f"fold{fold}_train", f"fold{fold}_valid", "empty"]
 
     @staticmethod
-    def final_benchmark() -> list[str]:
+    def final_benchmark():
         return ["development", "empty", "test"]
 
     def _split_by_user(self, interactions_by_user):
