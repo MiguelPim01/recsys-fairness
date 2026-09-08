@@ -11,20 +11,7 @@ class IDatasetSampler:
 
     DATASET_NAME = None
 
-    def __init__(
-        self,
-        source_dir,
-        output_dir,
-        user_limit=50,
-        item_limit=50,
-        seed=42,
-        minimum_user_interactions=6,
-    ):
-        if user_limit <= 0 or item_limit <= 0:
-            raise ValueError("user_limit and item_limit must be positive")
-        if minimum_user_interactions <= 0:
-            raise ValueError("minimum_user_interactions must be positive")
-
+    def __init__(self, source_dir, output_dir, user_limit, item_limit, seed=42, minimum_user_interactions=6):
         self.source_dir = Path(source_dir)
         self.output_dir = Path(output_dir)
         self.user_limit = user_limit
@@ -33,25 +20,26 @@ class IDatasetSampler:
         self.minimum_user_interactions = minimum_user_interactions
 
     def create_sample(self):
-        """Select popular items and random eligible users."""
+        """
+        Selects items with the most interactions, and then, selects users randomly with only
+        enough interactions for the fold split.
+
+        Returns:
+            statistics: Statistics about the sampling process.
+        """
+        # 1. Define data paths and count the number of rows in each file
         interaction_path = self.source_dir / f"{self.DATASET_NAME}.inter"
         user_path = self.source_dir / f"{self.DATASET_NAME}.user"
         item_path = self.source_dir / f"{self.DATASET_NAME}.item"
-        self._require_files(interaction_path, user_path, item_path)
 
         interaction_total = self._count_data_rows(interaction_path)
         user_total = self._count_data_rows(user_path)
         item_total = self._count_data_rows(item_path)
 
-        selected_items, source_interactions = self._select_items(
-            interaction_path,
-            interaction_total,
-        )
-        eligible_users = self._eligible_users(
-            interaction_path,
-            selected_items,
-            interaction_total,
-        )
+        # 2. Select items and users
+        selected_items, source_interactions = self._select_items(interaction_path, interaction_total)
+        
+        eligible_users = self._eligible_users(interaction_path, selected_items, interaction_total)
         selected_users = self._select_users(eligible_users)
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -60,6 +48,7 @@ class IDatasetSampler:
         output_user_path = self.output_dir / f"{self.DATASET_NAME}.user"
         output_item_path = self.output_dir / f"{self.DATASET_NAME}.item"
 
+        # 3. Write the selected interactions, users, and items to new files
         interaction_count, interacted_items = self._write_interactions(
             interaction_path,
             output_interaction_path,
@@ -67,6 +56,7 @@ class IDatasetSampler:
             selected_items,
             interaction_total,
         )
+        
         written_users = self._write_selected_entities(
             user_path,
             output_user_path,
@@ -74,6 +64,7 @@ class IDatasetSampler:
             "users",
             user_total,
         )
+        
         written_items = self._write_selected_entities(
             item_path,
             output_item_path,
@@ -82,16 +73,15 @@ class IDatasetSampler:
             item_total,
         )
 
+        # 4. Validations and computing statistics
         if written_users != selected_users:
             missing_users = selected_users - written_users
-            raise ValueError(
-                f"Missing profiles for {len(missing_users)} sampled users"
-            )
+            
+            raise ValueError(f"Missing profiles for {len(missing_users)} sampled users")
         if written_items != selected_items:
             missing_items = selected_items - written_items
-            raise ValueError(
-                f"Missing profiles for {len(missing_items)} sampled items"
-            )
+            
+            raise ValueError(f"Missing profiles for {len(missing_items)} sampled items")
 
         matrix_size = len(selected_users) * len(selected_items)
         density = interaction_count / matrix_size * 100
@@ -109,31 +99,32 @@ class IDatasetSampler:
         }
 
     def _select_items(self, interaction_path, interaction_total):
+        """
+        Selects the items with the most interactions.
+
+        Args:
+            interaction_path: Path to the RecBole interaction file.
+            interaction_total: Total number of interactions in the file.
+
+        Returns:
+            ranked_items: Set of selected item IDs.
+            interaction_count: Total number of interactions in the selected items.
+        """
         item_interactions = Counter()
         interaction_count = 0
 
+        # 1. Counts how many interactions each item has
         with interaction_path.open(encoding="utf-8", newline="") as input_file:
             reader = csv.reader(input_file, delimiter="\t")
             self._require_header(reader, interaction_path)
 
-            progress = styled_tqdm(
-                reader,
-                total=interaction_total,
-                desc="  ranking items",
-                unit="interaction",
-                dynamic_ncols=True,
-            )
+            progress = styled_tqdm(reader, total=interaction_total, desc="  ranking items", unit="interaction", dynamic_ncols=True)
             for row in progress:
                 self._validate_row(row, interaction_path, minimum_columns=2)
                 item_interactions[row[1]] += 1
                 interaction_count += 1
 
-        if len(item_interactions) < self.item_limit:
-            raise ValueError(
-                f"Dataset contains only {len(item_interactions)} items; "
-                f"{self.item_limit} are required"
-            )
-
+        # 2. Ranks items by interaction count
         ranked_items = sorted(
             item_interactions,
             key=lambda item_id: (-item_interactions[item_id], item_id),
@@ -143,7 +134,7 @@ class IDatasetSampler:
 
     def _eligible_users(self, interaction_path, selected_items, interaction_total):
         """
-        Finds users with enough interactions among the selected items.
+        Finds users with more than ``minimum_user_interactions`` interactions among the selected items.
 
         Args:
             interaction_path: Path to the RecBole interaction file.
@@ -151,7 +142,7 @@ class IDatasetSampler:
             interaction_total: Total number of interactions in the file.
 
         Returns:
-            Set containing eligible user IDs.
+            users: Set containing eligible user IDs.
         """
         sample_user_interactions = Counter()
 
@@ -159,13 +150,7 @@ class IDatasetSampler:
             reader = csv.reader(input_file, delimiter="\t")
             self._require_header(reader, interaction_path)
 
-            progress = styled_tqdm(
-                reader,
-                total=interaction_total,
-                desc="  finding users",
-                unit="interaction",
-                dynamic_ncols=True,
-            )
+            progress = styled_tqdm(reader, total=interaction_total, desc="  finding users", unit="interaction", dynamic_ncols=True)
             for row in progress:
                 self._validate_row(row, interaction_path, minimum_columns=2)
 
@@ -180,110 +165,86 @@ class IDatasetSampler:
 
     def _select_users(self, eligible_users):
         """
-        Randomly selects eligible users.
+        Randomly selects users from eligible users.
 
         Args:
             eligible_users: Set containing eligible user IDs.
 
         Returns:
-            Set containing the selected user IDs.
+            selected_users: Set containing the selected user IDs.
         """
-        if len(eligible_users) < self.user_limit:
-            raise ValueError(
-                f"Dataset contains only {len(eligible_users)} eligible users; "
-                f"{self.user_limit} are required"
-            )
-
         random_generator = random.Random(self.seed)
-        return set(
-            random_generator.sample(
-                sorted(eligible_users),
-                self.user_limit,
-            )
-        )
+        
+        selected_users = set(random_generator.sample(
+            sorted(eligible_users), 
+            self.user_limit
+        ))
+        
+        return selected_users
 
-    def _write_interactions(
-        self,
-        source_path,
-        output_path,
-        selected_users,
-        selected_items,
-        interaction_total,
-    ):
+    def _write_interactions(self, source_path, output_path, selected_users, selected_items, interaction_total):
+        """
+        Write the selected interactions to a new file.
+
+        Args:
+            source_path: Path to the source interaction file.
+            output_path: Path to the output interaction file.
+            selected_users: Set of user IDs that have been selected for the sample.
+            selected_items: Set of item IDs that have been selected for the sample.
+            interaction_total: Total number of interactions in the source file.
+
+        Returns:
+            interaction_count: Total number of interactions written to the output file.
+            interacted_items: Set of item IDs that have interactions in the output file.
+        """
         interaction_count = 0
         interacted_items = set()
 
-        with source_path.open(
-            encoding="utf-8",
-            newline="",
-        ) as input_file, output_path.open(
-            "w",
-            encoding="utf-8",
-            newline="",
-        ) as output_file:
+        with source_path.open(encoding="utf-8", newline="") as input_file, output_path.open("w", encoding="utf-8", newline="") as output_file:
             reader = csv.reader(input_file, delimiter="\t")
             writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
+            
             writer.writerow(self._require_header(reader, source_path))
 
-            progress = styled_tqdm(
-                reader,
-                total=interaction_total,
-                desc="  interactions",
-                unit="interaction",
-                dynamic_ncols=True,
-            )
+            progress = styled_tqdm(reader, total=interaction_total, desc="  interactions", unit="interaction", dynamic_ncols=True)
             for row in progress:
                 self._validate_row(row, source_path, minimum_columns=2)
                 if row[0] not in selected_users or row[1] not in selected_items:
                     continue
 
                 writer.writerow(row)
+                
                 interacted_items.add(row[1])
                 interaction_count += 1
-
-        if not interaction_count:
-            raise ValueError(f"The {self.DATASET_NAME} sample has no interactions")
 
         return interaction_count, interacted_items
 
     @staticmethod
-    def _write_selected_entities(
-        source_path,
-        output_path,
-        selected_ids,
-        description,
-        entity_total,
-    ):
+    def _write_selected_entities(source_path, output_path, selected_ids, description, entity_total):
+        """
+        Write selected entities to a new file.
+
+        Args:
+            source_path: Path to the source file containing all entities.
+            output_path: Path to the output file where selected entities will be written.
+            selected_ids: Set of IDs of the entities to be selected.
+            description: Description of the entities being selected.
+            entity_total: Total number of entities in the source file.
+
+        Returns:
+            written_ids: Set of IDs that were written to the output file.
+        """
         written_ids = set()
 
-        with source_path.open(
-            encoding="utf-8",
-            newline="",
-        ) as input_file, output_path.open(
-            "w",
-            encoding="utf-8",
-            newline="",
-        ) as output_file:
+        with source_path.open(encoding="utf-8", newline="") as input_file, output_path.open("w", encoding="utf-8", newline="") as output_file:
             reader = csv.reader(input_file, delimiter="\t")
             writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
+            
             header = next(reader, None)
-            if header is None:
-                raise ValueError(f"Atomic file is empty: {source_path}")
             writer.writerow(header)
 
-            progress = styled_tqdm(
-                reader,
-                total=entity_total,
-                desc=f"  {description}",
-                unit=description[:-1],
-                dynamic_ncols=True,
-            )
+            progress = styled_tqdm(reader, total=entity_total, desc=f"  {description}", unit=description[:-1], dynamic_ncols=True)
             for row in progress:
-                IDatasetSampler._validate_row(
-                    row,
-                    source_path,
-                    minimum_columns=1,
-                )
                 if row[0] in selected_ids:
                     writer.writerow(row)
                     written_ids.add(row[0])
@@ -319,12 +280,4 @@ class IDatasetSampler:
             raise ValueError(
                 f"Malformed row in {path}: expected at least "
                 f"{minimum_columns} columns"
-            )
-
-    @staticmethod
-    def _require_files(*paths):
-        missing = [str(path) for path in paths if not path.is_file()]
-        if missing:
-            raise FileNotFoundError(
-                f"Missing atomic files: {', '.join(missing)}"
             )

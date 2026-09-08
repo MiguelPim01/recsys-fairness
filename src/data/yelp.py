@@ -23,6 +23,17 @@ STATISTICS = [
     "active_users",
     "items",
 ]
+
+RESTAURANT_CATEGORIES = {
+    "restaurant", "restaurants", "food", "coffee",
+    "tea", "coffee & tea", "bakery", "bakeries",
+    "pizza", "burger", "burgers", "mexican", 
+    "italian", "chinese", "japanese", "sushi",
+    "sushi bars", "breakfast", "brunch", "breakfast & brunch",
+    "sandwich", "sandwiches", "barbeque", "barbecue",
+    "bbq", "seafood", "salad", "dessert",
+    "desserts", "ice cream", "ice cream & frozen yogurt", "cafe", "cafes",
+}
 # -----
 
 
@@ -34,41 +45,6 @@ class YelpTransformDataset:
     USERS_FILENAME = "yelp_academic_dataset_user.json"
     BUSINESSES_FILENAME = "yelp_academic_dataset_business.json"
     DAYS_PER_YEAR = 365.2425
-    RESTAURANT_CATEGORIES = {  # noqa: RUF012
-        "restaurant",
-        "restaurants",
-        "food",
-        "coffee",
-        "tea",
-        "coffee & tea",
-        "bakery",
-        "bakeries",
-        "pizza",
-        "burger",
-        "burgers",
-        "mexican",
-        "italian",
-        "chinese",
-        "japanese",
-        "sushi",
-        "sushi bars",
-        "breakfast",
-        "brunch",
-        "breakfast & brunch",
-        "sandwich",
-        "sandwiches",
-        "barbeque",
-        "barbecue",
-        "bbq",
-        "seafood",
-        "salad",
-        "dessert",
-        "desserts",
-        "ice cream",
-        "ice cream & frozen yogurt",
-        "cafe",
-        "cafes",
-    }
 
     def __init__(self, raw_dir, output_dir, use_restaurants_users_only=False):
         self.raw_dir = Path(raw_dir)
@@ -561,7 +537,7 @@ class YelpTransformDataset:
             return False
 
         return any(
-            cls._normalized_category(category) in cls.RESTAURANT_CATEGORIES
+            cls._normalized_category(category) in RESTAURANT_CATEGORIES
             for category in categories.split(",")
         )
 

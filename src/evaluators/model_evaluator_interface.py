@@ -46,10 +46,8 @@ class IModelEvaluator:
             cross_validation (bool, optional): Whether to perform cross-validation. Defaults to False.
             hyperparameter_search (bool, optional): Whether to perform hyperparameter search. Defaults to False.
             n_splits (int, optional): The number of splits for cross-validation. Defaults to 5.
-            estimate_runtime (bool, optional): Whether to estimate the model's total
-                training time from its first fold. Defaults to False.
-            dataset_count (int, optional): Number of datasets included in the model
-                execution. Defaults to 1.
+            estimate_runtime (bool, optional): Whether to estimate the model's total training time from its first fold. Defaults to False.
+            dataset_count (int, optional): Number of datasets included in the model execution. Defaults to 1.
 
         Returns:
             results (dict): Evaluation results, including best hyperparameters, validation results, and test results. 
