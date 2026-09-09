@@ -7,6 +7,26 @@ from sklearn.cluster import AgglomerativeClustering, KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
+NORTH_AMERICA_COUNTRIES = {
+    "Canada",
+    "United States",
+}
+
+EUROPE_COUNTRIES = {
+    "Albania", "Andorra", "Austria", "Belarus",
+    "Belgium", "Bosnia and Herzegovina", "Bulgaria", "Croatia",
+    "Cyprus", "Czech Republic", "Denmark", "Estonia",
+    "Faroe Islands", "Finland", "France", "Germany",
+    "Gibraltar", "Greece", "Holy See (Vatican City State)", "Hungary",
+    "Iceland", "Ireland", "Italy", "Latvia", "Liechtenstein",
+    "Lithuania", "Luxembourg", "Macedonia", "Malta",
+    "Moldova", "Monaco", "Montenegro", "Netherlands",
+    "Norway", "Poland", "Portugal", "Romania",
+    "Russian Federation", "San Marino", "Serbia",
+    "Slovakia", "Slovenia", "Spain", "Svalbard and Jan Mayen",
+    "Sweden", "Switzerland", "Ukraine", "United Kingdom",
+}
+
 
 @dataclass(frozen=True)
 class UserProfile:
@@ -14,6 +34,7 @@ class UserProfile:
     development_interactions: int
     gender: str = ""
     age: float | None = None
+    country: str = ""
     is_active: bool | None = None
     friend_count: float | None = None
     fans: float | None = None
@@ -45,6 +66,9 @@ def metadata_partitions(profiles: list[UserProfile], activity_fraction, dataset)
         profile.user_id: _gender_group(profile.gender) for profile in profiles
     }
     age = {profile.user_id: _age_group(profile.age) for profile in profiles}
+    location = {
+        profile.user_id: _location_group(profile.country) for profile in profiles
+    }
 
     active_count = max(1, math.ceil(len(profiles) * activity_fraction))
     activity_order = sorted(
@@ -66,6 +90,7 @@ def metadata_partitions(profiles: list[UserProfile], activity_fraction, dataset)
     return {
         "gender": Partition(gender, {"type": "metadata"}),
         "age": Partition(age, {"type": "metadata"}),
+        "location": Partition(location, {"type": "metadata"}),
         "activity": Partition(
             activity,
             {
@@ -232,8 +257,14 @@ def _feature_matrix(profiles: list[UserProfile], dataset: str) -> np.ndarray:
         [float(_gender_group(profile.gender) == name) for name in gender_names]
         for profile in profiles
     ])
+
+    location_names = ("north_america", "europe", "other_locations")
+    location = np.asarray([
+        [float(_location_group(profile.country) == name) for name in location_names]
+        for profile in profiles
+    ])
     
-    return np.concatenate((numeric, missing_age, gender), axis=1)
+    return np.concatenate((numeric, missing_age, gender, location), axis=1)
 
 def _yelp_feature_matrix(profiles: list[UserProfile]) -> np.ndarray:
     """
@@ -318,6 +349,15 @@ def _age_group(age: float | None) -> str:
     return "over_55"
 
 
+def _location_group(country: str) -> str:
+    if country in NORTH_AMERICA_COUNTRIES:
+        return "north_america"
+    if country in EUROPE_COUNTRIES:
+        return "europe"
+
+    return "other_locations"
+
+
 def _friend_count_group(friend_count: float) -> str:
     if friend_count == 0:
         return "no_friends"
@@ -332,12 +372,12 @@ def _friend_count_group(friend_count: float) -> str:
 def _fans_group(fans: float) -> str:
     if fans == 0:
         return "no_fans"
-    if fans <= 10:
-        return "1_10"
-    if fans <= 100:
-        return "11_100"
+    if fans == 1:
+        return "one_fan"
+    if fans <= 13:
+        return "2_13"
     
-    return "101_plus"
+    return "14_plus"
 
 
 def _tenure_group(tenure_years: float) -> str:

@@ -25,7 +25,14 @@ from matplotlib.patches import Patch
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 GROUPING_ORDER_BY_DATASET = {
-    "lastfm": ("activity", "age", "gender", "kmeans", "agglomerative"),
+    "lastfm": (
+        "activity",
+        "age",
+        "gender",
+        "location",
+        "kmeans",
+        "agglomerative",
+    ),
     "yelp": (
         "activity",
         "friend_count",
@@ -39,6 +46,7 @@ GROUPING_LABELS = {
     "activity": "Activity",
     "age": "Age",
     "gender": "Gender",
+    "location": "Location",
     "friend_count": "Friends",
     "fans": "Fans",
     "tenure": "Tenure",
@@ -49,6 +57,7 @@ GROUPING_COLORS = {
     "activity": "#ff7f0e",
     "age": "#9467bd",
     "gender": "#17becf",
+    "location": "#d62728",
     "friend_count": "#8c564b",
     "fans": "#bcbd22",
     "tenure": "#e377c2",
@@ -447,6 +456,18 @@ def _model_sort_key(model_name: str):
 
 def _available_grouping_order(dataset_name: str, raw_models: dict[str, Any]):
     grouping_order = GROUPING_ORDER_BY_DATASET[dataset_name.casefold()]
+    if dataset_name.casefold() == "lastfm":
+        has_location = all(
+            isinstance(model, dict)
+            and isinstance(model.get("groupings"), dict)
+            and "location" in model["groupings"]
+            for model in raw_models.values()
+        )
+        if has_location:
+            return grouping_order
+
+        return tuple(name for name in grouping_order if name != "location")
+
     if dataset_name.casefold() != "yelp":
         return grouping_order
 
@@ -476,6 +497,11 @@ def _group_sort_key(grouping_name: str, group_name: str):
             "unknown": 7,
         },
         "gender": {"male": 0, "female": 1, "unknown": 2},
+        "location": {
+            "north_america": 0,
+            "europe": 1,
+            "other_locations": 2,
+        },
         "friend_count": {
             "no_friends": 0,
             "1_10": 1,
@@ -484,8 +510,11 @@ def _group_sort_key(grouping_name: str, group_name: str):
         },
         "fans": {
             "no_fans": 0,
+            "one_fan": 1,
             "1_10": 1,
+            "2_13": 2,
             "11_100": 2,
+            "14_plus": 3,
             "101_plus": 3,
         },
         "tenure": {
@@ -519,10 +548,16 @@ def _group_label(group_name: str) -> str:
         "45_49": "45–49",
         "50_55": "50–55",
         "over_55": ">55",
+        "north_america": "North America",
+        "europe": "Europe",
+        "other_locations": "Other Locations",
         "no_friends": "None",
         "no_fans": "None",
+        "one_fan": "1",
         "1_10": "1–10",
+        "2_13": "2–13",
         "11_100": "11–100",
+        "14_plus": "14+",
         "101_plus": "101+",
         "under_1": "<1",
         "1_3": "1–3",

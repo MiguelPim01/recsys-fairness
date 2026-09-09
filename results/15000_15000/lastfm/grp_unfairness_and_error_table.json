@@ -1,0 +1,41 @@
+{
+  "dataset": "lastfm",
+  "columns": [
+    "model",
+    "grouping",
+    "rgrp",
+    "rmse"
+  ],
+  "rows": [
+    {
+      "model": "NeuMF",
+      "grouping": "Activity",
+      "rgrp": 1.598502748294084e-05,
+      "rmse": 0.27822410314876045
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Age",
+      "rgrp": 0.00038936021716878,
+      "rmse": 0.27822410314876045
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Gender",
+      "rgrp": 8.207534363203312e-07,
+      "rmse": 0.27822410314876045
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "K-Means",
+      "rgrp": 4.9916990702396145e-05,
+      "rmse": 0.27822410314876045
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Agglomerative",
+      "rgrp": 0.00036559332601947454,
+      "rmse": 0.27822410314876045
+    }
+  ]
+}

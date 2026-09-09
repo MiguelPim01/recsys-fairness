@@ -67,6 +67,7 @@ class GroupFairnessAnalyzer:
                     development_interactions=activity_counts[evaluation.user_id],
                     gender=raw_profile.get("gender", ""),
                     age=raw_profile.get("age"),
+                    country=raw_profile.get("country", ""),
                     is_active=raw_profile.get("is_active"),
                     friend_count=raw_profile.get("friend_count"),
                     fans=raw_profile.get("fans"),
@@ -279,6 +280,7 @@ class GroupFairnessAnalyzer:
             profiles[user_id] = {
                 "gender": row["gender:token"],
                 "age": float(raw_age) if raw_age else None,
+                "country": row["country:token"],
             }
         
         return profiles
