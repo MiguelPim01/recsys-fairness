@@ -357,12 +357,12 @@ def _friend_count_group(friend_count: float) -> str:
 
 
 def _fans_group(fans: float) -> str:
-    if fans == 0:
-        return "no_fans"
-    if fans == 1:
-        return "one_fan"
+    if fans <= 1:
+        return "0_1"
+    if fans <= 7:
+        return "2_7"
     if fans <= 13:
-        return "2_13"
+        return "8_13"
     
     return "14_plus"
 
