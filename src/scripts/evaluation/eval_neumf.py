@@ -65,6 +65,13 @@ def parse_arguments():
         default=5,
         help="Number of cross-validation folds (default: 5).",
     )
+
+    parser.add_argument(
+        "--fold-workers",
+        type=int,
+        default=1,
+        help="Maximum number of folds to run in parallel (default: 1).",
+    )
     
     return parser.parse_args()
 
@@ -99,6 +106,7 @@ def main():
             n_splits=arguments.folds,
             estimate_runtime=dataset_index == 0,
             dataset_count=len(dataset_names),
+            fold_workers=arguments.fold_workers,
         )
 
 
