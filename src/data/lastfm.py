@@ -1,4 +1,5 @@
 import csv
+import math
 import unicodedata
 from collections import defaultdict
 from pathlib import Path
@@ -18,6 +19,7 @@ STATISTICS = [
     "dropped_missing_artist_rows",
     "aggregated_duplicate_rows",
     "written_interactions",
+    "active_users",
 ]
 # -----
 
@@ -47,15 +49,19 @@ class LastFMTransformDataset:
 
         # Writing interaction matrix
         profile_users, complete_profile_users = self._read_profile_users(statistics)
-        interaction_users, items = self._transform_interactions(
+        interaction_users, items, user_play_counts = self._transform_interactions(
             profile_users,
             complete_profile_users,
             statistics,
         )
 
+        activity_threshold = self._activity_threshold(user_play_counts)
+
         # Writing user and item profiles
         self._transform_users(
             interaction_users,
+            user_play_counts,
+            activity_threshold,
             statistics["raw_user_profiles"],
             statistics,
         )
@@ -63,6 +69,7 @@ class LastFMTransformDataset:
 
         statistics["users"] = len(interaction_users)
         statistics["items"] = len(items)
+        statistics["activity_threshold"] = activity_threshold
 
         return dict(statistics)
 
@@ -78,6 +85,7 @@ class LastFMTransformDataset:
         Returns:
             users: Set of user IDs from the interaction data.
             items: Dictionary mapping item_id to (musicbrainz_artist_id, artist_name).
+            user_play_counts: Dictionary mapping user_id to total play count.
         """
         input_path = self.raw_dir / self.INTERACTIONS_FILENAME
         output_path = self.output_dir / "lastfm.inter"
@@ -85,6 +93,7 @@ class LastFMTransformDataset:
 
         users = set()
         items = {}
+        user_play_counts = {}
         current_user = None
         current_interactions = {}
 
@@ -142,6 +151,7 @@ class LastFMTransformDataset:
                 if user_id != current_user:
                     if current_user is not None:
                         self._write_user_interactions(writer, current_user, current_interactions, statistics)
+                        user_play_counts[current_user] = sum(current_interactions.values())
 
                     if user_id in users:
                         raise ValueError(
@@ -164,8 +174,9 @@ class LastFMTransformDataset:
 
             if current_user is not None:
                 self._write_user_interactions(writer, current_user, current_interactions, statistics)
+                user_play_counts[current_user] = sum(current_interactions.values())
 
-        return users, items
+        return users, items, user_play_counts
 
     def _read_profile_users(self, statistics):
         """
@@ -209,7 +220,7 @@ class LastFMTransformDataset:
 
         return users, complete_users
 
-    def _transform_users(self, interaction_users, total_users, statistics):
+    def _transform_users(self, interaction_users, user_play_counts, activity_threshold, total_users, statistics):
         """
         Writes user data to lastfm.user file:
             - user_id
@@ -217,9 +228,13 @@ class LastFMTransformDataset:
             - age
             - country
             - signup_date
+            - total_play_count
+            - is_active
 
         Args:
             interaction_users: Set of user IDs from the interaction data.
+            user_play_counts: Dictionary mapping user_id to total play count.
+            activity_threshold: Minimum total play count for an active user.
             total_users: Total number of users in the profile data.
             statistics: Statistics dictionary.
         """
@@ -238,6 +253,8 @@ class LastFMTransformDataset:
                 "age:float",
                 "country:token",
                 "signup_date:token",
+                "total_play_count:float",
+                "is_active:token",
             ])
 
             progress = tqdm(
@@ -254,6 +271,8 @@ class LastFMTransformDataset:
                     continue
 
                 age = self._valid_age(raw_age)
+                total_play_count = user_play_counts[user_id]
+                is_active = "true" if total_play_count >= activity_threshold else "false"
 
                 # Adding user data
                 writer.writerow([
@@ -262,15 +281,40 @@ class LastFMTransformDataset:
                     age,
                     country,
                     signup_date,
+                    total_play_count,
+                    is_active,
                 ])
 
                 written_users.add(user_id)
+
+                if is_active == "true":
+                    statistics["active_users"] += 1
 
         missing_count = len(interaction_users) - len(written_users)
         if missing_count:
             raise ValueError(f"Missing profiles for {missing_count} interaction users")
 
         statistics["written_user_profiles"] = len(written_users)
+
+    @staticmethod
+    def _activity_threshold(user_play_counts):
+        """
+        Finds the total play count threshold for the 5% most active users.
+
+        Args:
+            user_play_counts: Dictionary mapping user_id to total play count.
+
+        Returns:
+            activity_threshold: Minimum total play count for an active user.
+        """
+        play_counts = sorted(user_play_counts.values())
+
+        if not play_counts:
+            raise ValueError("The LastFM dataset has no users with valid interactions")
+
+        percentile_index = math.ceil(0.95 * len(play_counts)) - 1
+
+        return play_counts[percentile_index]
 
     def _write_items(self, items):
         """

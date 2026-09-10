@@ -47,13 +47,12 @@ class Partition:
     metadata: dict[str, Any]
 
 
-def metadata_partitions(profiles: list[UserProfile], activity_fraction, dataset):
+def metadata_partitions(profiles: list[UserProfile], dataset):
     """
     Create metadata partitions for the given dataset.
 
     Args:
         profiles (list[UserProfile]): User profiles containing metadata for partitioning.
-        activity_fraction: The fraction of active users to include in the partition.
         dataset: The dataset to use for partitioning.
 
     Returns:
@@ -69,21 +68,8 @@ def metadata_partitions(profiles: list[UserProfile], activity_fraction, dataset)
     location = {
         profile.user_id: _location_group(profile.country) for profile in profiles
     }
-
-    active_count = max(1, math.ceil(len(profiles) * activity_fraction))
-    activity_order = sorted(
-        profiles,
-        key=lambda profile: (-profile.development_interactions, profile.user_id),
-    )
-    
-    active_users = {
-        profile.user_id for profile in activity_order[:active_count]
-    }
-    
     activity = {
-        profile.user_id: (
-            "active" if profile.user_id in active_users else "inactive"
-        )
+        profile.user_id: "active" if profile.is_active else "inactive"
         for profile in profiles
     }
 
@@ -95,8 +81,9 @@ def metadata_partitions(profiles: list[UserProfile], activity_fraction, dataset)
             activity,
             {
                 "type": "metadata",
-                "active_fraction": activity_fraction,
-                "active_users": active_count,
+                "active_users": sum(
+                    1 for profile in profiles if profile.is_active
+                ),
             },
         ),
     }
@@ -241,7 +228,7 @@ def _feature_matrix(profiles: list[UserProfile], dataset: str) -> np.ndarray:
     numeric = np.asarray([
         [
             profile.age if profile.age is not None else median_age,
-            math.log1p(profile.development_interactions),
+            float(profile.is_active),
         ]
         for profile in profiles
     ], dtype=float)

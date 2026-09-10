@@ -39,7 +39,6 @@ fairness:
   output_dir: results
   rating_min: 1.0
   rating_max: 5.0
-  activity_fraction: 0.05
   cluster_k_min: 2
   cluster_k_max: 10
   kmeans_n_init: 20

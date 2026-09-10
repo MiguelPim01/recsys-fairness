@@ -50,7 +50,12 @@ class GroupFairnessAnalyzer:
         """
         topk = sorted({int(value) for value in self.config["topk"]})
 
-        activity_counts = self._development_activity(development_data)
+        dataset = str(self.config["dataset"])
+        activity_counts = (
+            self._development_activity(development_data)
+            if dataset.casefold() == "yelp"
+            else Counter()
+        )
         raw_profiles = self._read_profiles()
         evaluations = self._evaluate_users(trainer, test_data, topk)
         
@@ -75,15 +80,8 @@ class GroupFairnessAnalyzer:
                 )
             )
 
-        activity_fraction = float(self.settings["activity_fraction"])
-        
-        if not 0.0 < activity_fraction < 1.0:
-            raise ValueError("fairness.activity_fraction must be between 0 and 1")
-
-        dataset = str(self.config["dataset"])
         partitions = metadata_partitions(
             profiles,
-            activity_fraction,
             dataset,
         )
         
@@ -276,11 +274,13 @@ class GroupFairnessAnalyzer:
         for row in reader:
             user_id = row["user_id:token"]
             raw_age = row["age:float"].strip()
+            raw_is_active = row["is_active:token"].strip().casefold()
             
             profiles[user_id] = {
                 "gender": row["gender:token"],
                 "age": float(raw_age) if raw_age else None,
                 "country": row["country:token"],
+                "is_active": raw_is_active == "true",
             }
         
         return profiles

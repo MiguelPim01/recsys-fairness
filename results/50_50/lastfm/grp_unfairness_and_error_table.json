@@ -10,7 +10,7 @@
     {
       "model": "NeuMF",
       "grouping": "Activity",
-      "rgrp": 4.429084726730295,
+      "rgrp": 11.874089624876843,
       "rmse": 2.0745280221447713
     },
     {
@@ -34,19 +34,19 @@
     {
       "model": "NeuMF",
       "grouping": "K-Means",
-      "rgrp": 0.41722425955195536,
+      "rgrp": 5.66320961830011,
       "rmse": 2.0745280221447713
     },
     {
       "model": "NeuMF",
       "grouping": "Agglomerative",
-      "rgrp": 0.41722425955195536,
+      "rgrp": 5.845973066509695,
       "rmse": 2.0745280221447713
     },
     {
       "model": "MultiVAE",
       "grouping": "Activity",
-      "rgrp": 0.03858589839788552,
+      "rgrp": 0.5210664461477718,
       "rmse": 0.698390673770027
     },
     {
@@ -70,13 +70,13 @@
     {
       "model": "MultiVAE",
       "grouping": "K-Means",
-      "rgrp": 0.04517902696801771,
+      "rgrp": 0.2720054905585815,
       "rmse": 0.698390673770027
     },
     {
       "model": "MultiVAE",
       "grouping": "Agglomerative",
-      "rgrp": 0.04517902696801771,
+      "rgrp": 0.27134957528401626,
       "rmse": 0.698390673770027
     }
   ]
