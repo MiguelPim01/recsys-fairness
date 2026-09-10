@@ -1,0 +1,72 @@
+{
+  "users": 100,
+  "items": 100,
+  "interactions": 859,
+  "density": "8.590000%",
+  "groupings": {
+    "activity": {
+      "active": {
+        "users": 77,
+        "percentage": "77.00%"
+      },
+      "inactive": {
+        "users": 23,
+        "percentage": "23.00%"
+      }
+    },
+    "friend_count": {
+      "no_friends": {
+        "users": 3,
+        "percentage": "3.00%"
+      },
+      "1_10": {
+        "users": 12,
+        "percentage": "12.00%"
+      },
+      "11_100": {
+        "users": 22,
+        "percentage": "22.00%"
+      },
+      "101_plus": {
+        "users": 63,
+        "percentage": "63.00%"
+      }
+    },
+    "fans": {
+      "0_1": {
+        "users": 23,
+        "percentage": "23.00%"
+      },
+      "2_7": {
+        "users": 21,
+        "percentage": "21.00%"
+      },
+      "8_13": {
+        "users": 6,
+        "percentage": "6.00%"
+      },
+      "14_plus": {
+        "users": 50,
+        "percentage": "50.00%"
+      }
+    },
+    "tenure": {
+      "under_1": {
+        "users": 0,
+        "percentage": "0.00%"
+      },
+      "1_3": {
+        "users": 0,
+        "percentage": "0.00%"
+      },
+      "3_5": {
+        "users": 1,
+        "percentage": "1.00%"
+      },
+      "5_plus": {
+        "users": 99,
+        "percentage": "99.00%"
+      }
+    }
+  }
+}

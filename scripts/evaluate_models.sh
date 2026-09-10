@@ -9,6 +9,7 @@ model="neumf"
 dataset="all"
 user_limit=1000
 item_limit=1000
+fold_workers=1
 evaluation_arguments=()
 
 show_help() {
@@ -25,6 +26,7 @@ Options:
   --cross-validation         Run user-stratified cross-validation.
   --hyperparameter-search    Search configurations from the model search YAML.
   --folds N                  Number of cross-validation folds (default: 5).
+  --fold-workers N           Maximum number of folds to run in parallel (default: 1).
   -h, --help                 Show this help message.
 
 Examples:
@@ -36,6 +38,7 @@ Examples:
   scripts/evaluate_models.sh --hyperparameter-search
   scripts/evaluate_models.sh --cross-validation --hyperparameter-search
   scripts/evaluate_models.sh --cross-validation --folds 3
+  scripts/evaluate_models.sh --cross-validation --fold-workers 2
 EOF
 }
 
@@ -100,6 +103,18 @@ while (( $# > 0 )); do
             evaluation_arguments+=("--folds" "$2")
             shift 2
             ;;
+        --fold-workers)
+            if (( $# < 2 )); then
+                echo "Missing value for --fold-workers." >&2
+                exit 2
+            fi
+            if [[ ! "$2" =~ ^[1-9][0-9]*$ ]]; then
+                echo "--fold-workers must be a positive integer." >&2
+                exit 2
+            fi
+            fold_workers="$2"
+            shift 2
+            ;;
         -h | --help)
             show_help
             exit 0
@@ -121,6 +136,7 @@ fi
 evaluation_arguments+=(
     --user-limit "$user_limit"
     --item-limit "$item_limit"
+    --fold-workers "$fold_workers"
 )
 
 case "$model" in
