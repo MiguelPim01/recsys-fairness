@@ -92,7 +92,7 @@ class IDatasetSampler:
             "selected_users": len(selected_users),
             "selected_items": len(selected_items),
             "sample_interactions": interaction_count,
-            "density": f"{density:.4f}%",
+            "density": f"{density:.6f}%",
             "items_without_interactions": len(selected_items - interacted_items),
             "seed": self.seed,
             "minimum_user_interactions": self.minimum_user_interactions,

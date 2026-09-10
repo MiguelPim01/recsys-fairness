@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 
 from src.sampler.yelp_sampler import YelpSampler
+from src.utils.sample_statistics import generate_sample_statistics
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -23,6 +24,13 @@ def parse_arguments():
         type=Path,
         default=REPOSITORY_ROOT / "data/sample/yelp",
         help="Directory where the sampled atomic files will be written.",
+    )
+
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        default=REPOSITORY_ROOT / "results",
+        help="Root directory where sample statistics will be written.",
     )
     
     parser.add_argument(
@@ -69,7 +77,20 @@ def main():
     )
     statistics = sampler.create_sample()
 
+    statistics_output_dir = (
+        arguments.results_dir
+        / f"{arguments.user_limit}_{arguments.item_limit}"
+        / "yelp"
+        / "sample_statistics"
+    )
+    generate_sample_statistics(
+        sample_dir=arguments.output_dir,
+        dataset="yelp",
+        output_dir=statistics_output_dir,
+    )
+
     print(f"\nYelp sample created in {arguments.output_dir.resolve()}")
+    print(f"Sample statistics created in {statistics_output_dir.resolve()}")
     
     for name, value in statistics.items():
         print(f"\t - {name}: {value}")
