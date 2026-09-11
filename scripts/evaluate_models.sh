@@ -19,7 +19,7 @@ Usage: scripts/evaluate_models.sh [options]
 Train and evaluate recommendation models.
 
 Options:
-  --model MODEL              Model to evaluate: neumf, multivae, or all (default: neumf).
+  --model MODEL              Model to evaluate: neumf, multivae, or all in parallel (default: neumf).
   --dataset DATASET          Dataset to evaluate: all, lastfm, or yelp (default: all).
   --user-limit N             Number of sampled users (default: 1000).
   --item-limit N             Number of sampled items (default: 1000).
@@ -153,10 +153,27 @@ case "$model" in
     all)
         "${python_command[@]}" -m src.scripts.evaluation.eval_neumf \
             --dataset "$dataset" \
-            "${evaluation_arguments[@]}"
+            "${evaluation_arguments[@]}" &
+        neumf_pid=$!
+
         "${python_command[@]}" -m src.scripts.evaluation.eval_multivae \
             --dataset "$dataset" \
-            "${evaluation_arguments[@]}"
+            "${evaluation_arguments[@]}" &
+        multivae_pid=$!
+
+        neumf_status=0
+        multivae_status=0
+
+        wait "$neumf_pid" || neumf_status=$?
+        wait "$multivae_pid" || multivae_status=$?
+
+        if (( neumf_status != 0 )); then
+            exit "$neumf_status"
+        fi
+
+        if (( multivae_status != 0 )); then
+            exit "$multivae_status"
+        fi
         ;;
     *)
         echo "Unsupported model: $model. Available models: neumf, multivae, all." >&2

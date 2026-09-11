@@ -16,6 +16,7 @@ from src.fairness.grouping import (
     metadata_partitions,
 )
 from src.fairness.results import ResultsStore
+from src.utils.results import generate_result_artifacts
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,8 @@ class GroupFairnessAnalyzer:
             for k in topk
         }
         self._validate_recbole_ndcg(global_ndcg, recbole_metrics)
+        ranking_metrics = self._ranking_metrics(recbole_metrics, topk)
+        ranking_metrics["ndcg"] = global_ndcg
 
         analysis = {
             "evaluation": {
@@ -110,7 +113,7 @@ class GroupFairnessAnalyzer:
                 "test_interactions": sum(
                     len(user.squared_errors) for user in evaluations
                 ),
-                "ndcg": global_ndcg,
+                **ranking_metrics,
             },
             "groupings": {
                 name: self._partition_metrics(partition, evaluations, topk)
@@ -123,6 +126,7 @@ class GroupFairnessAnalyzer:
             dataset=str(self.config["dataset"]),
             algorithm=self.algorithm,
             analysis=analysis,
+            after_update=generate_result_artifacts,
         )
         
         return analysis, output_path
@@ -408,3 +412,27 @@ class GroupFairnessAnalyzer:
                     f"Detailed {metric_name}={value:.8f} differs from "
                     f"RecBole={float(recbole_metrics[metric_name]):.8f}"
                 )
+
+    @staticmethod
+    def _ranking_metrics(recbole_metrics: dict[str, Any], topk: list[int]):
+        metrics = {}
+
+        for metric in ("ndcg", "mrr", "recall"):
+            values = {}
+
+            for k in topk:
+                metric_name = f"{metric}@{k}"
+
+                if metric_name not in recbole_metrics:
+                    raise ValueError(f"Missing test metric: {metric_name}")
+
+                value = float(recbole_metrics[metric_name])
+
+                if not math.isfinite(value):
+                    raise ValueError(f"Test metric {metric_name} is not finite")
+
+                values[str(k)] = value
+
+            metrics[metric] = values
+
+        return metrics

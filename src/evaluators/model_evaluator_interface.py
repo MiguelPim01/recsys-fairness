@@ -18,7 +18,6 @@ from recbole.utils import get_model, get_trainer, init_seed
 from tqdm.auto import tqdm
 
 from src.fairness import GroupFairnessAnalyzer
-from src.utils.results import generate_result_artifacts
 
 # ----- Config
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -590,8 +589,6 @@ class IModelEvaluator:
             development_data=development_data,
             recbole_metrics=test_result,
         )
-
-        _ = generate_result_artifacts(results_path)
         
         return analysis, results_path
 

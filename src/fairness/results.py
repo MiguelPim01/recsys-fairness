@@ -1,6 +1,8 @@
+import fcntl
 import json
 import os
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +16,13 @@ class ResultsStore:
         output_dir = Path(output_dir)
         self.output_dir = output_dir if output_dir.is_absolute() else REPOSITORY_ROOT / output_dir
 
-    def update(self, dataset: str, algorithm: str, analysis: dict[str, Any]):
+    def update(
+        self,
+        dataset: str,
+        algorithm: str,
+        analysis: dict[str, Any],
+        after_update: Callable[[Path], Any] | None = None,
+    ):
         """
         Update the results file for a given dataset with the analysis results of a specific algorithm.
 
@@ -22,6 +30,7 @@ class ResultsStore:
             dataset: Dataset name.
             algorithm: Algorithm name.
             analysis: Analysis results to be added to the results file.
+            after_update: Function executed while the dataset results are locked.
 
         Returns:
             output_path: Path to the updated results file.
@@ -29,40 +38,47 @@ class ResultsStore:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         output_path = self.output_dir / f"results_{dataset}.json"
-        
-        document = self._read(output_path)
-        document["results"][algorithm] = analysis
+        lock_path = self.output_dir / f".{output_path.name}.lock"
 
-        temporary_path = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                dir=self.output_dir,
-                prefix=f".{output_path.name}.",
-                suffix=".tmp",
-                delete=False,
-            ) as output_file:
-                temporary_path = Path(output_file.name)
-                
-                json.dump(
-                    document,
-                    output_file,
-                    indent=2,
-                    sort_keys=True,
-                    allow_nan=False,
-                )
-                
-                output_file.write("\n")
-                output_file.flush()
-                
-                os.fsync(output_file.fileno())
+        with lock_path.open("a+") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
 
-            os.replace(temporary_path, output_path)
-        except Exception:
-            if temporary_path is not None and temporary_path.exists():
-                temporary_path.unlink()
-            raise
+            document = self._read(output_path)
+            document["results"][algorithm] = analysis
+
+            temporary_path = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    dir=self.output_dir,
+                    prefix=f".{output_path.name}.",
+                    suffix=".tmp",
+                    delete=False,
+                ) as output_file:
+                    temporary_path = Path(output_file.name)
+
+                    json.dump(
+                        document,
+                        output_file,
+                        indent=2,
+                        sort_keys=True,
+                        allow_nan=False,
+                    )
+
+                    output_file.write("\n")
+                    output_file.flush()
+
+                    os.fsync(output_file.fileno())
+
+                os.replace(temporary_path, output_path)
+
+                if after_update is not None:
+                    after_update(output_path)
+            except Exception:
+                if temporary_path is not None and temporary_path.exists():
+                    temporary_path.unlink()
+                raise
 
         return output_path
 
