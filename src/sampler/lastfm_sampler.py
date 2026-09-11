@@ -52,21 +52,10 @@ class LastFMSampler(IDatasetSampler):
         if not interactions:
             raise ValueError("The lastfm sample has no interactions")
 
-        logged_counts = [math.log1p(row[2]) for row in interactions]
-        
-        minimum = min(logged_counts)
-        maximum = max(logged_counts)
-
         with output_path.open("w", encoding="utf-8", newline="") as output_file:
             writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
-            writer.writerow(["user_id:token", "item_id:token", "rating:float"])
+            writer.writerow(["user_id:token", "item_id:token", "play_count:float"])
 
-            for (user_id, item_id, _), logged_count in zip(interactions, logged_counts):
-                if math.isclose(minimum, maximum):
-                    rating = 3.0
-                else:
-                    rating = 1.0 + 4.0 * (logged_count - minimum) / (maximum - minimum)
-
-                writer.writerow([user_id, item_id, rating])
+            writer.writerows(interactions)
 
         return len(interactions), interacted_items

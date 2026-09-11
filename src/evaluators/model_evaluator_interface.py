@@ -60,11 +60,15 @@ class IModelEvaluator:
         if fold_workers < 1:
             raise ValueError("fold_workers must be greater than or equal to 1")
 
-        # 1. If there aren't any cv and hyperparameter search, run simple evaluation.
-        if not cross_validation and not hyperparameter_search:
-            return self._evaluate_simple()
-
         base_config = self._build_config()
+
+        # 1. If there aren't any cv and hyperparameter search, run simple evaluation.
+        if (
+            not cross_validation
+            and not hyperparameter_search
+            and not self.cross_validation_splitter.REQUIRES_EXTERNAL_SPLIT
+        ):
+            return self._evaluate_simple()
         
         splitter = self.cross_validation_splitter(
             dataset_dir=self.dataset_dir,

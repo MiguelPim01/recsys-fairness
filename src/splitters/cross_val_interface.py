@@ -12,6 +12,8 @@ class ICrossValidationSplitter:
 
     DATASET_NAME = None
     MANIFEST_FILENAME = None
+    MANIFEST_VERSION = 1
+    REQUIRES_EXTERNAL_SPLIT = False
 
     def __init__(self, dataset_dir, n_splits = 5, seed = 42, test_ratio = 0.2):
         self.dataset_dir = Path(dataset_dir)
@@ -39,6 +41,11 @@ class ICrossValidationSplitter:
         # 2. Read interactions and split them into development and test sets
         header, interactions_by_user = self._read_interactions()
         development_rows, test_rows, validation_fold_by_row = self._split_by_user(interactions_by_user)
+        header, preprocessing = self._preprocess_splits(
+            header,
+            development_rows,
+            test_rows,
+        )
 
         # 3. Write split files.
         self._write_atomic_file(self.dataset_dir / f"{self.DATASET_NAME}.development.inter", header, development_rows)
@@ -60,7 +67,12 @@ class ICrossValidationSplitter:
             "folds": self.n_splits,
         }
         
-        self._write_manifest(source_hash, expected_files, statistics)
+        self._write_manifest(
+            source_hash,
+            expected_files,
+            statistics,
+            preprocessing,
+        )
         
         return {**statistics, "reused": False}
 
@@ -113,6 +125,11 @@ class ICrossValidationSplitter:
 
         return development_rows, test_rows, validation_fold_by_row
 
+    @staticmethod
+    def _preprocess_splits(header, development_rows, test_rows):
+        """Preprocess development and test rows after they have been isolated."""
+        return header, None
+
     def _read_interactions(self):
         """
         Read the interactions from the atomic file and group them by user.
@@ -163,7 +180,8 @@ class ICrossValidationSplitter:
             return False
         
         return (
-            manifest.get("source_sha256") == source_hash
+            manifest.get("version") == self.MANIFEST_VERSION
+            and manifest.get("source_sha256") == source_hash
             and manifest.get("n_splits") == self.n_splits
             and manifest.get("seed") == self.seed
             and manifest.get("test_ratio") == self.test_ratio
@@ -187,8 +205,9 @@ class ICrossValidationSplitter:
         except (json.JSONDecodeError, OSError):
             return None
 
-    def _write_manifest(self, source_hash, expected_files, statistics):
+    def _write_manifest(self, source_hash, expected_files, statistics, preprocessing):
         manifest = {
+            "version": self.MANIFEST_VERSION,
             "source_sha256": source_hash,
             "n_splits": self.n_splits,
             "seed": self.seed,
@@ -196,6 +215,9 @@ class ICrossValidationSplitter:
             "files": [path.name for path in expected_files],
             "statistics": statistics,
         }
+
+        if preprocessing is not None:
+            manifest["preprocessing"] = preprocessing
         
         with self.manifest_path.open("w", encoding="utf-8") as output_file:
             json.dump(manifest, output_file, indent=2)
