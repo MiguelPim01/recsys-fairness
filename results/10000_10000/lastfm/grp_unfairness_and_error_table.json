@@ -1,0 +1,83 @@
+{
+  "dataset": "lastfm",
+  "columns": [
+    "model",
+    "grouping",
+    "rgrp",
+    "rmse"
+  ],
+  "rows": [
+    {
+      "model": "NeuMF",
+      "grouping": "Activity",
+      "rgrp": 0.0001453936278034346,
+      "rmse": 0.2697067806839136
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Age",
+      "rgrp": 0.0003171398346979758,
+      "rmse": 0.2697067806839136
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Gender",
+      "rgrp": 1.0829877073956884e-08,
+      "rmse": 0.2697067806839136
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Location",
+      "rgrp": 1.3101781761552974e-05,
+      "rmse": 0.2697067806839136
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "K-Means",
+      "rgrp": 0.0001453936278034346,
+      "rmse": 0.2697067806839136
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Agglomerative",
+      "rgrp": 0.0001479366391931045,
+      "rmse": 0.2697067806839136
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Activity",
+      "rgrp": 0.003653559914233117,
+      "rmse": 0.4043717098961641
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Age",
+      "rgrp": 0.0006099357265266525,
+      "rmse": 0.4043717098961641
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Gender",
+      "rgrp": 5.595331263662116e-05,
+      "rmse": 0.4043717098961641
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Location",
+      "rgrp": 5.494756584747798e-05,
+      "rmse": 0.4043717098961641
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "K-Means",
+      "rgrp": 0.003653559914233117,
+      "rmse": 0.4043717098961641
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Agglomerative",
+      "rgrp": 0.0036888916712956013,
+      "rmse": 0.4043717098961641
+    }
+  ]
+}
