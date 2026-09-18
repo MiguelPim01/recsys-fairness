@@ -1,0 +1,47 @@
+{
+  "dataset": "yelp",
+  "columns": [
+    "model",
+    "grouping",
+    "rgrp",
+    "rmse"
+  ],
+  "rows": [
+    {
+      "model": "MultiVAE",
+      "grouping": "Activity",
+      "rgrp": 0.042535056520842114,
+      "rmse": 1.244640364542434
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Friends",
+      "rgrp": 0.05318740294076744,
+      "rmse": 1.244640364542434
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Fans",
+      "rgrp": 0.04694823326131347,
+      "rmse": 1.244640364542434
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Tenure",
+      "rgrp": 0.0028170618784748224,
+      "rmse": 1.244640364542434
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "K-Means",
+      "rgrp": 0.04840590943591515,
+      "rmse": 1.244640364542434
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Agglomerative",
+      "rgrp": 0.042535056520842114,
+      "rmse": 1.244640364542434
+    }
+  ]
+}
