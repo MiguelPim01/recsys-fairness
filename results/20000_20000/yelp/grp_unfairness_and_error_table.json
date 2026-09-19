@@ -8,6 +8,42 @@
   ],
   "rows": [
     {
+      "model": "NeuMF",
+      "grouping": "Activity",
+      "rgrp": 0.038858055674193454,
+      "rmse": 1.1930364333805672
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Friends",
+      "rgrp": 0.050062961573171874,
+      "rmse": 1.1930364333805672
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Fans",
+      "rgrp": 0.040490129289800066,
+      "rmse": 1.1930364333805672
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Tenure",
+      "rgrp": 0.004781463909012508,
+      "rmse": 1.1930364333805672
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "K-Means",
+      "rgrp": 0.04074765786256704,
+      "rmse": 1.1930364333805672
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Agglomerative",
+      "rgrp": 0.038858055674193454,
+      "rmse": 1.1930364333805672
+    },
+    {
       "model": "MultiVAE",
       "grouping": "Activity",
       "rgrp": 0.042535056520842114,
