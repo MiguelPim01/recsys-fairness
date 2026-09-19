@@ -1,5 +1,7 @@
 import csv
+import fcntl
 import json
+import math
 import os
 import tempfile
 from collections import Counter
@@ -17,7 +19,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter
 
-from src.fairness.grouping import UserProfile, metadata_partitions
+from src.fairness.grouping import Partition, UserProfile, metadata_partitions
+
+LATENT_GROUPING_NAMES = ("kmeans", "agglomerative")
 
 GROUPING_CONFIG = {
     "lastfm": {
@@ -192,6 +196,234 @@ def generate_sample_statistics(sample_dir, dataset, output_dir):
         "groupings": groupings,
     }
     _atomic_json_write(paths["statistics"], statistics)
+
+    return paths
+
+
+def persist_latent_group_statistics(output_dir, partitions):
+    """Add final-test latent group statistics to the sample artifacts."""
+    group_counts = {}
+    clustering = {}
+    population_size = None
+
+    for grouping_name in LATENT_GROUPING_NAMES:
+        try:
+            partition = partitions[grouping_name]
+        except KeyError as error:
+            raise ValueError(
+                f"Missing latent partition: {grouping_name}"
+            ) from error
+
+        if not isinstance(partition, Partition):
+            raise TypeError(f"{grouping_name} must be a Partition")
+
+        current_population_size = len(partition.assignments)
+        if current_population_size == 0:
+            raise ValueError(f"{grouping_name} partition is empty")
+        if population_size is None:
+            population_size = current_population_size
+        elif current_population_size != population_size:
+            raise ValueError("Latent partitions have different population sizes")
+
+        metadata = partition.metadata
+        if metadata.get("type") != "latent":
+            raise ValueError(f"{grouping_name} is not a latent partition")
+
+        group_counts[grouping_name] = Counter(partition.assignments.values())
+        clustering[grouping_name] = metadata
+
+    return persist_latent_group_summaries(
+        output_dir=output_dir,
+        group_counts=group_counts,
+        clustering=clustering,
+        population_size=population_size,
+    )
+
+
+def persist_latent_group_summaries(
+    output_dir,
+    group_counts,
+    clustering,
+    population_size,
+):
+    """Persist validated latent group counts and clustering metadata."""
+    output_dir = Path(output_dir)
+    statistics_path = output_dir / "statistics.json"
+    lock_path = output_dir / ".statistics.json.lock"
+
+    if isinstance(population_size, bool) or not isinstance(population_size, int):
+        raise TypeError("population_size must be an integer")
+    if population_size <= 0:
+        raise ValueError("population_size must be positive")
+
+    latent_groupings = {}
+    normalized_clustering = {}
+    plot_data = {}
+
+    for grouping_name in LATENT_GROUPING_NAMES:
+        try:
+            raw_counts = group_counts[grouping_name]
+            metadata = clustering[grouping_name]
+        except KeyError as error:
+            raise ValueError(
+                f"Missing latent grouping summary: {grouping_name}"
+            ) from error
+
+        if not isinstance(raw_counts, dict):
+            raise ValueError(f"{grouping_name} counts must be an object")
+        if not isinstance(metadata, dict):
+            raise ValueError(f"{grouping_name} metadata must be an object")
+
+        try:
+            selected_k = int(metadata["selected_k"])
+            selected_silhouette = float(metadata["selected_silhouette"])
+            raw_silhouettes = metadata["silhouette_by_k"]
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(
+                f"Invalid clustering metadata for {grouping_name}"
+            ) from error
+
+        if selected_k < 2 or not math.isfinite(selected_silhouette):
+            raise ValueError(f"Invalid selected clustering for {grouping_name}")
+        if not isinstance(raw_silhouettes, dict):
+            raise ValueError(
+                f"{grouping_name}.silhouette_by_k must be an object"
+            )
+
+        silhouettes = {}
+        for raw_k, raw_score in raw_silhouettes.items():
+            try:
+                k = int(raw_k)
+                score = float(raw_score)
+            except (TypeError, ValueError) as error:
+                raise ValueError(
+                    f"Invalid silhouette entry for {grouping_name}"
+                ) from error
+            if k < 2 or not math.isfinite(score):
+                raise ValueError(
+                    f"Invalid silhouette entry for {grouping_name}: k={raw_k}"
+                )
+            silhouettes[str(k)] = score
+
+        if str(selected_k) not in silhouettes:
+            raise ValueError(
+                f"Selected k is missing from {grouping_name}.silhouette_by_k"
+            )
+
+        order = tuple(f"group_{index}" for index in range(1, selected_k + 1))
+        if set(raw_counts) != set(order):
+            raise ValueError(
+                f"Unexpected groups in {grouping_name}: "
+                f"{', '.join(sorted(raw_counts))}"
+            )
+
+        counts = Counter()
+        for group_name in order:
+            users = raw_counts[group_name]
+            if isinstance(users, bool) or not isinstance(users, int) or users <= 0:
+                raise ValueError(
+                    f"{grouping_name}/{group_name} users must be a positive integer"
+                )
+            counts[group_name] = users
+
+        if sum(counts.values()) != population_size:
+            raise ValueError(
+                f"{grouping_name} counts do not total {population_size} users"
+            )
+
+        latent_groupings[grouping_name] = {
+            group_name: {
+                "users": counts[group_name],
+                "percentage": f"{counts[group_name] / population_size * 100:.2f}%",
+            }
+            for group_name in order
+        }
+        normalized_clustering[grouping_name] = {
+            "selected_k": selected_k,
+            "selected_silhouette": selected_silhouette,
+            "silhouette_by_k": {
+                key: silhouettes[key]
+                for key in sorted(silhouettes, key=int)
+            },
+        }
+        plot_data[grouping_name] = (
+            counts,
+            {
+                "order": order,
+                "labels": {
+                    group_name: f"Group {index}"
+                    for index, group_name in enumerate(order, start=1)
+                },
+                "title": (
+                    "User Distribution by "
+                    f"{'K-Means' if grouping_name == 'kmeans' else 'Agglomerative'} "
+                    "Cluster"
+                ),
+                "xlabel": "Cluster",
+            },
+        )
+
+    if not statistics_path.exists():
+        raise FileNotFoundError(
+            f"Sample statistics file not found: {statistics_path}"
+        )
+
+    paths = {"statistics": statistics_path}
+    with lock_path.open("a+") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+        with statistics_path.open(encoding="utf-8") as input_file:
+            statistics = json.load(input_file)
+
+        sample_users = statistics.get("users")
+        if sample_users != population_size:
+            raise ValueError(
+                "Latent partition population does not match sample statistics: "
+                f"{population_size} != {sample_users}"
+            )
+
+        groupings = statistics.get("groupings")
+        if not isinstance(groupings, dict):
+            raise ValueError("Sample statistics has no groupings object")
+
+        existing_clustering = statistics.get("clustering", {})
+        if not isinstance(existing_clustering, dict):
+            raise ValueError("Sample statistics clustering must be an object")
+
+        for grouping_name in LATENT_GROUPING_NAMES:
+            if (
+                grouping_name in groupings
+                and groupings[grouping_name] != latent_groupings[grouping_name]
+            ):
+                raise ValueError(
+                    f"Conflicting {grouping_name} distribution already persisted"
+                )
+            if (
+                grouping_name in existing_clustering
+                and existing_clustering[grouping_name]
+                != normalized_clustering[grouping_name]
+            ):
+                raise ValueError(
+                    f"Conflicting {grouping_name} metadata already persisted"
+                )
+
+        for grouping_name in LATENT_GROUPING_NAMES:
+            counts, config = plot_data[grouping_name]
+            output_path = output_dir / f"{grouping_name}_distribution.pdf"
+            _save_group_distribution(
+                output_path,
+                counts,
+                population_size,
+                config,
+            )
+            paths[grouping_name] = output_path
+            groupings[grouping_name] = latent_groupings[grouping_name]
+            existing_clustering[grouping_name] = normalized_clustering[
+                grouping_name
+            ]
+
+        statistics["clustering"] = existing_clustering
+        _atomic_json_write(statistics_path, statistics)
 
     return paths
 

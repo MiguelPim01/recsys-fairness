@@ -121,7 +121,14 @@ class GroupFairnessAnalyzer:
             },
         }
 
+        from src.utils.sample_statistics import persist_latent_group_statistics
+
         store = ResultsStore(self.settings["output_dir"])
+        persist_latent_group_statistics(
+            output_dir=store.output_dir / dataset.casefold() / "sample_statistics",
+            partitions=partitions,
+        )
+
         output_path = store.update(
             dataset=str(self.config["dataset"]),
             algorithm=self.algorithm,
