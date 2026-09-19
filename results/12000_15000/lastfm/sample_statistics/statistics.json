@@ -1,0 +1,80 @@
+{
+  "users": 12000,
+  "items": 15000,
+  "interactions": 517045,
+  "density": "0.287247%",
+  "groupings": {
+    "activity": {
+      "active": {
+        "users": 607,
+        "percentage": "5.06%"
+      },
+      "inactive": {
+        "users": 11393,
+        "percentage": "94.94%"
+      }
+    },
+    "age": {
+      "under_18": {
+        "users": 871,
+        "percentage": "7.26%"
+      },
+      "18_24": {
+        "users": 6301,
+        "percentage": "52.51%"
+      },
+      "25_34": {
+        "users": 3597,
+        "percentage": "29.98%"
+      },
+      "35_44": {
+        "users": 901,
+        "percentage": "7.51%"
+      },
+      "45_49": {
+        "users": 127,
+        "percentage": "1.06%"
+      },
+      "50_55": {
+        "users": 93,
+        "percentage": "0.78%"
+      },
+      "over_55": {
+        "users": 110,
+        "percentage": "0.92%"
+      },
+      "unknown": {
+        "users": 0,
+        "percentage": "0.00%"
+      }
+    },
+    "gender": {
+      "male": {
+        "users": 8899,
+        "percentage": "74.16%"
+      },
+      "female": {
+        "users": 3101,
+        "percentage": "25.84%"
+      },
+      "unknown": {
+        "users": 0,
+        "percentage": "0.00%"
+      }
+    },
+    "location": {
+      "north_america": {
+        "users": 2462,
+        "percentage": "20.52%"
+      },
+      "europe": {
+        "users": 7391,
+        "percentage": "61.59%"
+      },
+      "other_locations": {
+        "users": 2147,
+        "percentage": "17.89%"
+      }
+    }
+  }
+}
