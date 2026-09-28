@@ -150,8 +150,55 @@ def latent_partitions(profiles: list[UserProfile], dataset, seed, k_min, k_max, 
     Returns:
         partitions: A dictionary containing the clustering results for each algorithm. 
     """
+    partitions_by_k = latent_partitions_by_k(
+        profiles=profiles,
+        dataset=dataset,
+        seed=seed,
+        k_min=k_min,
+        k_max=k_max,
+        kmeans_n_init=kmeans_n_init,
+    )
+
+    return select_latent_partitions(partitions_by_k)
+
+
+def select_latent_partitions(partitions_by_k: dict[str, dict[int, Partition]]):
+    """Select the highest-silhouette partition for each clustering method."""
+    partitions = {}
+    for name, candidates in partitions_by_k.items():
+        selected_k = min(
+            candidates,
+            key=lambda k: (-candidates[k].metadata["silhouette"], k),
+        )
+        selected = candidates[selected_k]
+        scores = {
+            str(k): candidate.metadata["silhouette"]
+            for k, candidate in sorted(candidates.items())
+        }
+        partitions[name] = Partition(
+            selected.assignments,
+            {
+                "type": "latent",
+                "selected_k": selected_k,
+                "selected_silhouette": selected.metadata["silhouette"],
+                "silhouette_by_k": scores,
+            },
+        )
+
+    return partitions
+
+
+def latent_partitions_by_k(
+    profiles: list[UserProfile],
+    dataset,
+    seed,
+    k_min,
+    k_max,
+    kmeans_n_init,
+):
+    """Create one reproducible latent partition for every valid cluster count."""
     matrix = _feature_matrix(profiles, dataset)
-    
+
     user_ids = [profile.user_id for profile in profiles]
     candidate_ks = range(k_min, min(k_max, len(profiles) - 1) + 1)
 
@@ -170,10 +217,9 @@ def latent_partitions(profiles: list[UserProfile], dataset, seed, k_min, k_max, 
         ).fit_predict(matrix),
     }
 
-    partitions = {}
+    partitions_by_k = {}
     for name, cluster in algorithms.items():
-        labels_by_k: dict[int, np.ndarray] = {}
-        scores: dict[int, float] = {}
+        candidates = {}
         
         for k in candidate_ks:
             labels = np.asarray(cluster(k), dtype=int)
@@ -184,28 +230,22 @@ def latent_partitions(profiles: list[UserProfile], dataset, seed, k_min, k_max, 
             if not math.isfinite(score):
                 continue
             
-            labels_by_k[k] = labels
-            scores[k] = score
+            canonical_labels = _canonical_labels(matrix, labels, user_ids)
+            candidates[k] = Partition(
+                dict(zip(user_ids, canonical_labels)),
+                {
+                    "type": "latent",
+                    "k": k,
+                    "silhouette": score,
+                },
+            )
 
-        if not scores:
+        if not candidates:
             raise ValueError(f"No valid {name} clustering for k={k_min}..{k_max}")
 
-        selected_k = min(scores, key=lambda k: (-scores[k], k))
-        labels = _canonical_labels(matrix, labels_by_k[selected_k], user_ids)
-        assignments = dict(zip(user_ids, labels))
-        partitions[name] = Partition(
-            assignments,
-            {
-                "type": "latent",
-                "selected_k": selected_k,
-                "selected_silhouette": scores[selected_k],
-                "silhouette_by_k": {
-                    str(k): scores[k] for k in sorted(scores)
-                },
-            },
-        )
+        partitions_by_k[name] = candidates
 
-    return partitions
+    return partitions_by_k
 
 
 def _feature_matrix(profiles: list[UserProfile], dataset: str) -> np.ndarray:

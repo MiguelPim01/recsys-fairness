@@ -1,0 +1,180 @@
+{
+  "users": 50,
+  "items": 50,
+  "interactions": 444,
+  "density": "17.760000%",
+  "groupings": {
+    "activity": {
+      "active": {
+        "users": 4,
+        "percentage": "8.00%"
+      },
+      "inactive": {
+        "users": 46,
+        "percentage": "92.00%"
+      }
+    },
+    "age": {
+      "under_18": {
+        "users": 6,
+        "percentage": "12.00%"
+      },
+      "18_24": {
+        "users": 29,
+        "percentage": "58.00%"
+      },
+      "25_34": {
+        "users": 11,
+        "percentage": "22.00%"
+      },
+      "35_44": {
+        "users": 3,
+        "percentage": "6.00%"
+      },
+      "45_49": {
+        "users": 0,
+        "percentage": "0.00%"
+      },
+      "50_55": {
+        "users": 0,
+        "percentage": "0.00%"
+      },
+      "over_55": {
+        "users": 1,
+        "percentage": "2.00%"
+      },
+      "unknown": {
+        "users": 0,
+        "percentage": "0.00%"
+      }
+    },
+    "gender": {
+      "male": {
+        "users": 41,
+        "percentage": "82.00%"
+      },
+      "female": {
+        "users": 9,
+        "percentage": "18.00%"
+      },
+      "unknown": {
+        "users": 0,
+        "percentage": "0.00%"
+      }
+    },
+    "location": {
+      "north_america": {
+        "users": 11,
+        "percentage": "22.00%"
+      },
+      "europe": {
+        "users": 30,
+        "percentage": "60.00%"
+      },
+      "other_locations": {
+        "users": 9,
+        "percentage": "18.00%"
+      }
+    },
+    "kmeans": {
+      "group_1": {
+        "users": 2,
+        "percentage": "4.00%"
+      },
+      "group_2": {
+        "users": 6,
+        "percentage": "12.00%"
+      },
+      "group_3": {
+        "users": 4,
+        "percentage": "8.00%"
+      },
+      "group_4": {
+        "users": 9,
+        "percentage": "18.00%"
+      },
+      "group_5": {
+        "users": 17,
+        "percentage": "34.00%"
+      },
+      "group_6": {
+        "users": 6,
+        "percentage": "12.00%"
+      },
+      "group_7": {
+        "users": 5,
+        "percentage": "10.00%"
+      },
+      "group_8": {
+        "users": 1,
+        "percentage": "2.00%"
+      }
+    },
+    "agglomerative": {
+      "group_1": {
+        "users": 2,
+        "percentage": "4.00%"
+      },
+      "group_2": {
+        "users": 6,
+        "percentage": "12.00%"
+      },
+      "group_3": {
+        "users": 4,
+        "percentage": "8.00%"
+      },
+      "group_4": {
+        "users": 9,
+        "percentage": "18.00%"
+      },
+      "group_5": {
+        "users": 6,
+        "percentage": "12.00%"
+      },
+      "group_6": {
+        "users": 19,
+        "percentage": "38.00%"
+      },
+      "group_7": {
+        "users": 3,
+        "percentage": "6.00%"
+      },
+      "group_8": {
+        "users": 1,
+        "percentage": "2.00%"
+      }
+    }
+  },
+  "clustering": {
+    "kmeans": {
+      "selected_k": 8,
+      "selected_silhouette": 0.6449231049777895,
+      "silhouette_by_k": {
+        "2": 0.6205810440647112,
+        "3": 0.6426168097731718,
+        "4": 0.42150950745728266,
+        "5": 0.5042464692143992,
+        "6": 0.6006629366622063,
+        "7": 0.6167228073082146,
+        "8": 0.6449231049777895,
+        "9": 0.6044451539481404,
+        "10": 0.6104669601803913
+      }
+    },
+    "agglomerative": {
+      "selected_k": 8,
+      "selected_silhouette": 0.6579639029862786,
+      "silhouette_by_k": {
+        "2": 0.6205810440647112,
+        "3": 0.6426168097731718,
+        "4": 0.38958391571093065,
+        "5": 0.4970667693630042,
+        "6": 0.5901286033773195,
+        "7": 0.6302733338996381,
+        "8": 0.6579639029862786,
+        "9": 0.6252024808357759,
+        "10": 0.5955801771018815
+      }
+    }
+  }
+}

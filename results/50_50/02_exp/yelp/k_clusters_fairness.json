@@ -1,0 +1,114 @@
+{
+  "dataset": "yelp",
+  "metric": "rgrp",
+  "tables": {
+    "kmeans": {
+      "columns": [
+        "clusters",
+        "NeuMF",
+        "MultiVAE"
+      ],
+      "rows": [
+        {
+          "clusters": 2,
+          "NeuMF": 0.4071655328798191,
+          "MultiVAE": 2.2646292112196783e-07
+        },
+        {
+          "clusters": 3,
+          "NeuMF": 1.989355555555556,
+          "MultiVAE": 0.020717147612215575
+        },
+        {
+          "clusters": 4,
+          "NeuMF": 4.551233212809917,
+          "MultiVAE": 0.025267978253477263
+        },
+        {
+          "clusters": 5,
+          "NeuMF": 6.532522448979591,
+          "MultiVAE": 0.09882878145663501
+        },
+        {
+          "clusters": 6,
+          "NeuMF": 3.255956329779174,
+          "MultiVAE": 0.25441669678664686
+        },
+        {
+          "clusters": 7,
+          "NeuMF": 4.098786848072561,
+          "MultiVAE": 0.3741989059623939
+        },
+        {
+          "clusters": 8,
+          "NeuMF": 4.29314287042942,
+          "MultiVAE": 0.3666389031736334
+        },
+        {
+          "clusters": 9,
+          "NeuMF": 7.634641822892851,
+          "MultiVAE": 1.1068733969813387
+        },
+        {
+          "clusters": 10,
+          "NeuMF": 5.296321296296296,
+          "MultiVAE": 0.4165997857979991
+        }
+      ]
+    },
+    "agglomerative": {
+      "columns": [
+        "clusters",
+        "NeuMF",
+        "MultiVAE"
+      ],
+      "rows": [
+        {
+          "clusters": 2,
+          "NeuMF": 0.765625,
+          "MultiVAE": 0.023189585720596113
+        },
+        {
+          "clusters": 3,
+          "NeuMF": 1.7071286848072564,
+          "MultiVAE": 0.03463404824230776
+        },
+        {
+          "clusters": 4,
+          "NeuMF": 3.2890625,
+          "MultiVAE": 0.06864776414091847
+        },
+        {
+          "clusters": 5,
+          "NeuMF": 3.4277777777777785,
+          "MultiVAE": 0.21303004909452927
+        },
+        {
+          "clusters": 6,
+          "NeuMF": 3.0997781635802473,
+          "MultiVAE": 0.35804273984780816
+        },
+        {
+          "clusters": 7,
+          "NeuMF": 3.0889229024943305,
+          "MultiVAE": 0.3709071457309761
+        },
+        {
+          "clusters": 8,
+          "NeuMF": 3.9299999999999993,
+          "MultiVAE": 0.3354939971600434
+        },
+        {
+          "clusters": 9,
+          "NeuMF": 3.74327160493827,
+          "MultiVAE": 0.3066588303930402
+        },
+        {
+          "clusters": 10,
+          "NeuMF": 6.632280555555557,
+          "MultiVAE": 0.9335368306826051
+        }
+      ]
+    }
+  }
+}

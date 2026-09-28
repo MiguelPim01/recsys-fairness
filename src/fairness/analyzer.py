@@ -12,10 +12,11 @@ import torch
 from src.fairness.grouping import (
     Partition,
     UserProfile,
-    latent_partitions,
+    latent_partitions_by_k,
     metadata_partitions,
+    select_latent_partitions,
 )
-from src.fairness.results import ResultsStore
+from src.fairness.results import KClustersFairnessStore, ResultsStore
 from src.utils.results import generate_result_artifacts
 
 
@@ -86,16 +87,15 @@ class GroupFairnessAnalyzer:
             dataset,
         )
         
-        partitions.update(
-            latent_partitions(
-                profiles=profiles,
-                dataset=dataset,
-                seed=int(self.config["seed"]),
-                k_min=int(self.settings["cluster_k_min"]),
-                k_max=int(self.settings["cluster_k_max"]),
-                kmeans_n_init=int(self.settings["kmeans_n_init"]),
-            )
+        latent_by_k = latent_partitions_by_k(
+            profiles=profiles,
+            dataset=dataset,
+            seed=int(self.config["seed"]),
+            k_min=int(self.settings["cluster_k_min"]),
+            k_max=int(self.settings["cluster_k_max"]),
+            kmeans_n_init=int(self.settings["kmeans_n_init"]),
         )
+        partitions.update(select_latent_partitions(latent_by_k))
 
         global_ndcg = {
             str(k): float(np.mean([user.ndcg[str(k)] for user in evaluations]))
@@ -125,15 +125,31 @@ class GroupFairnessAnalyzer:
 
         store = ResultsStore(self.settings["output_dir"])
         persist_latent_group_statistics(
-            output_dir=store.output_dir / dataset.casefold() / "sample_statistics",
+            output_dir=store.output_dir / "sample_statistics",
             partitions=partitions,
+        )
+
+        k_values = {
+            clustering_name: {
+                k: self._partition_metrics(partition, evaluations, topk)["rgrp"]
+                for k, partition in candidates.items()
+            }
+            for clustering_name, candidates in latent_by_k.items()
+        }
+        KClustersFairnessStore(store.output_dir).update(
+            dataset=dataset,
+            model=self.algorithm,
+            values=k_values,
         )
 
         output_path = store.update(
             dataset=str(self.config["dataset"]),
             algorithm=self.algorithm,
             analysis=analysis,
-            after_update=generate_result_artifacts,
+            after_update=lambda path: generate_result_artifacts(
+                path,
+                output_dir=store.output_dir,
+            ),
         )
         
         return analysis, output_path

@@ -23,7 +23,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Patch
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 GROUPING_ORDER_BY_DATASET = {
     "lastfm": (
         "activity",
@@ -456,31 +455,17 @@ def _model_sort_key(model_name: str):
 
 def _available_grouping_order(dataset_name: str, raw_models: dict[str, Any]):
     grouping_order = GROUPING_ORDER_BY_DATASET[dataset_name.casefold()]
-    if dataset_name.casefold() == "lastfm":
-        has_location = all(
+    return tuple(
+        grouping_name
+        for grouping_name in grouping_order
+        if all(
             isinstance(model, dict)
             and isinstance(model.get("groupings"), dict)
-            and "location" in model["groupings"]
+            and isinstance(model["groupings"].get(grouping_name), dict)
+            and model["groupings"][grouping_name].get("valid") is True
             for model in raw_models.values()
         )
-        if has_location:
-            return grouping_order
-
-        return tuple(name for name in grouping_order if name != "location")
-
-    if dataset_name.casefold() != "yelp":
-        return grouping_order
-
-    has_fans = all(
-        isinstance(model, dict)
-        and isinstance(model.get("groupings"), dict)
-        and "fans" in model["groupings"]
-        for model in raw_models.values()
     )
-    if has_fans:
-        return grouping_order
-
-    return tuple(name for name in grouping_order if name != "fans")
 
 
 def _group_sort_key(grouping_name: str, group_name: str):
@@ -589,11 +574,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Generate publication figures and table data from results JSON."
     )
-    parser.add_argument("--dataset", required=True, help="Dataset name, e.g. lastfm.")
     parser.add_argument(
         "--input",
         type=Path,
-        help="Input JSON; defaults to results/results_<dataset>.json.",
+        required=True,
+        help="Experiment results.json file.",
     )
     parser.add_argument(
         "--output-dir",
@@ -605,13 +590,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     arguments = _build_parser().parse_args()
-    input_path = arguments.input or (
-        REPOSITORY_ROOT / "results" / f"results_{arguments.dataset}.json"
-    )
-    output_dir = arguments.output_dir or (
-        REPOSITORY_ROOT / "results" / arguments.dataset
-    )
-    paths = generate_result_artifacts(input_path, output_dir)
+    output_dir = arguments.output_dir or arguments.input.parent
+    paths = generate_result_artifacts(arguments.input, output_dir)
     for name, path in paths.items():
         print(f"{name}: {path}")
 

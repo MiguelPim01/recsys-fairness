@@ -10,6 +10,7 @@ dataset="all"
 user_limit=1000
 item_limit=1000
 fold_workers=1
+experiment=""
 evaluation_arguments=()
 
 show_help() {
@@ -21,6 +22,7 @@ Train and evaluate recommendation models.
 Options:
   --model MODEL              Model to evaluate: neumf, multivae, or all in parallel (default: neumf).
   --dataset DATASET          Dataset to evaluate: all, lastfm, or yelp (default: all).
+  --experiment NN_exp        Versioned experiment containing the dataset snapshot (required).
   --user-limit N             Number of sampled users (default: 1000).
   --item-limit N             Number of sampled items (default: 1000).
   --cross-validation         Run user-stratified cross-validation.
@@ -30,15 +32,14 @@ Options:
   -h, --help                 Show this help message.
 
 Examples:
-  scripts/evaluate_models.sh
-  scripts/evaluate_models.sh --model multivae
-  scripts/evaluate_models.sh --model all --dataset yelp
-  scripts/evaluate_models.sh --dataset yelp
-  scripts/evaluate_models.sh --cross-validation
-  scripts/evaluate_models.sh --hyperparameter-search
-  scripts/evaluate_models.sh --cross-validation --hyperparameter-search
-  scripts/evaluate_models.sh --cross-validation --folds 3
-  scripts/evaluate_models.sh --cross-validation --fold-workers 2
+  scripts/evaluate_models.sh --experiment 01_exp
+  scripts/evaluate_models.sh --experiment 01_exp --model multivae
+  scripts/evaluate_models.sh --experiment 01_exp --model all --dataset yelp
+  scripts/evaluate_models.sh --experiment 01_exp --cross-validation
+  scripts/evaluate_models.sh --experiment 01_exp --hyperparameter-search
+  scripts/evaluate_models.sh --experiment 01_exp --cross-validation --hyperparameter-search
+  scripts/evaluate_models.sh --experiment 01_exp --cross-validation --folds 3
+  scripts/evaluate_models.sh --experiment 01_exp --cross-validation --fold-workers 2
 EOF
 }
 
@@ -66,6 +67,14 @@ while (( $# > 0 )); do
                     exit 2
                     ;;
             esac
+            shift 2
+            ;;
+        --experiment)
+            if (( $# < 2 )); then
+                echo "Missing value for --experiment." >&2
+                exit 2
+            fi
+            experiment="$2"
             shift 2
             ;;
         --user-limit | --item-limit)
@@ -127,6 +136,11 @@ while (( $# > 0 )); do
     esac
 done
 
+if [[ -z "$experiment" ]]; then
+    echo "--experiment is required." >&2
+    exit 2
+fi
+
 if [[ -x ".venv/bin/python" ]]; then
     python_command=(".venv/bin/python")
 else
@@ -134,6 +148,7 @@ else
 fi
 
 evaluation_arguments+=(
+    --experiment "$experiment"
     --user-limit "$user_limit"
     --item-limit "$item_limit"
     --fold-workers "$fold_workers"

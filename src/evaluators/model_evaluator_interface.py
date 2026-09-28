@@ -17,12 +17,9 @@ from recbole.data import create_dataset, data_preparation
 from recbole.utils import get_model, get_trainer, init_seed
 from tqdm.auto import tqdm
 
-from src.fairness import GroupFairnessAnalyzer
+from src.utils.experiments import register_model
 
-# ----- Config
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 LOGGER = logging.getLogger("recsys_fairness.evaluation")
-# -----
 
 class IModelEvaluator:
     """Train, cross-validate and tune a RecBole model."""
@@ -31,8 +28,9 @@ class IModelEvaluator:
     MODEL_CLASS = None
     HYPERPARAMETER_LABELS: ClassVar[dict] = {}
 
-    def __init__(self, dataset_dir, user_limit, item_limit, config_path, hp_search_config_path, cross_validation_splitter = None):
+    def __init__(self, dataset_dir, experiment_dir, user_limit, item_limit, config_path, hp_search_config_path, cross_validation_splitter = None):
         self.dataset_dir = Path(dataset_dir)
+        self.experiment_dir = Path(experiment_dir)
         self.config_path = Path(config_path)
         self.hp_search_config_path = Path(hp_search_config_path)
         self.cross_validation_splitter = cross_validation_splitter
@@ -55,6 +53,7 @@ class IModelEvaluator:
             results (dict): Evaluation results, including best hyperparameters, validation results, and test results. 
         """
         self._configure_project_logging()
+        self._ensure_checkpoint_available()
 
         if fold_workers < 1:
             raise ValueError("fold_workers must be greater than or equal to 1")
@@ -178,7 +177,7 @@ class IModelEvaluator:
         )
 
         # 3. Final evaluation: trains model with development data and evaluates on test data.
-        test_result, analysis, _ = self._train_development_and_evaluate_test(
+        test_result = self._train_development_and_evaluate_test(
             splitter.final_benchmark(),
             best_candidate["hyperparameters"],
             best_candidate["median_epoch"],
@@ -193,7 +192,6 @@ class IModelEvaluator:
             "validation": best_candidate,
             "candidates": candidate_results,
             "test_result": test_result,
-            "analysis": analysis,
         }
         
         LOGGER.info("Test Results: \n  --> %s\n", self._format_metrics(test_result))
@@ -316,6 +314,7 @@ class IModelEvaluator:
         train_data, valid_data, test_data = data_preparation(config, dataset)
         
         _, trainer = self._create_model_and_trainer(config, train_data)
+        self._configure_final_checkpoint(trainer)
 
         best_epoch = 0
 
@@ -344,14 +343,7 @@ class IModelEvaluator:
         )
         
         test_result = self._evaluate_saved_model(trainer, test_data)
-        analysis, results_path = self._analyze_final_test(
-            trainer=trainer,
-            config=config,
-            test_data=test_data,
-            development_data=(train_data, valid_data),
-            test_result=test_result,
-        )
-
+        self._register_final_checkpoint(trainer)
         validation = {
             "hyperparameters": {},
             "fold_results": [{
@@ -376,14 +368,12 @@ class IModelEvaluator:
             "validation": validation,
             "candidates": [validation],
             "test_result": test_result,
-            "analysis": analysis,
         }
         
         LOGGER.info("Validation | %s", self._format_metrics(best_valid_result))
         LOGGER.info("Test | %s", self._format_metrics(test_result))
         
-        if results_path is not None:
-            LOGGER.info("Fairness results | %s", results_path)
+        LOGGER.info("Saved model | %s", trainer.saved_model_file)
         
         return results
 
@@ -447,8 +437,6 @@ class IModelEvaluator:
 
         Returns:
             test_result: The evaluation results on the test data.
-            analysis: The group-fairness analysis results.
-            results_path: The path to the directory containing the analysis results.
         """
         config = self._build_config({
             "benchmark_filename": benchmark_filename,
@@ -462,6 +450,7 @@ class IModelEvaluator:
         train_data, valid_data, test_data = data_preparation(config, dataset)
         
         _, trainer = self._create_model_and_trainer(config, train_data)
+        self._configure_final_checkpoint(trainer)
 
         LOGGER.info(
             "Starting final evaluation on test set | %d epoch(s)",
@@ -477,15 +466,9 @@ class IModelEvaluator:
         )
         
         test_result = self._evaluate_saved_model(trainer, test_data)
-        analysis, results_path = self._analyze_final_test(
-            trainer=trainer,
-            config=config,
-            test_data=test_data,
-            development_data=(train_data, valid_data),
-            test_result=test_result,
-        )
-        
-        return test_result, analysis, results_path
+        self._register_final_checkpoint(trainer)
+        LOGGER.info("Saved model | %s", trainer.saved_model_file)
+        return test_result
 
     def _build_config(self, overrides = None) -> Config:
         """
@@ -500,6 +483,7 @@ class IModelEvaluator:
         
         config_dict = {
             "data_path": str(self.dataset_dir.parent.resolve()),
+            "checkpoint_dir": str(self.models_dir.resolve()),
             **(overrides or {}),
         }
         
@@ -512,7 +496,7 @@ class IModelEvaluator:
                 config_dict=config_dict,
             )
         
-        config["fairness"]["output_dir"] = str(self.results_dir)
+        config["fairness"]["output_dir"] = str(self.dataset_results_dir)
         
         return config
 
@@ -558,39 +542,25 @@ class IModelEvaluator:
                 show_progress=False,
             )
 
-    def _analyze_final_test(self, trainer, config, test_data, development_data, test_result):
-        """
-        Run detailed group-fairness analysis only for the final test.
-        
-        Args:
-            trainer: RecBole trainer.
-            config: RecBole configuration.
-            test_data: Test data prepared by RecBole.
-            development_data: Tuple of (train_data, valid_data) prepared by RecBole.
-            test_result: Test results.
-        
-        Returns:
-            analysis: The group-fairness analysis results.
-            results_path: The path to the directory containing the analysis results.
-        """
-        settings = config["fairness"]
-        if not settings or not settings.get("enabled", False):
-            return None, None
+    def _configure_final_checkpoint(self, trainer):
+        """Use a stable checkpoint name inside this immutable experiment."""
+        self._ensure_checkpoint_available()
+        trainer.saved_model_file = str(self.checkpoint_path)
 
-        analyzer = GroupFairnessAnalyzer(
-            dataset_dir=self.dataset_dir,
-            algorithm=self.MODEL_NAME,
-            config=config,
+    def _ensure_checkpoint_available(self):
+        if self.checkpoint_path.exists():
+            raise FileExistsError(
+                f"Model checkpoint already exists and will not be overwritten: "
+                f"{self.checkpoint_path}"
+            )
+
+    def _register_final_checkpoint(self, trainer):
+        register_model(
+            experiment_dir=self.experiment_dir,
+            dataset=self.dataset_dir.name,
+            model=self.MODEL_NAME.casefold(),
+            checkpoint_path=Path(trainer.saved_model_file),
         )
-        
-        analysis, results_path = analyzer.analyze(
-            trainer=trainer,
-            test_data=test_data,
-            development_data=development_data,
-            recbole_metrics=test_result,
-        )
-        
-        return analysis, results_path
 
     def _load_hyperparameter_candidates(self) -> list[dict[str, Any]]:
         """
@@ -700,7 +670,13 @@ class IModelEvaluator:
         warnings.filterwarnings("ignore", category=FutureWarning, module=r"recbole\..*")
     
     @property
-    def results_dir(self) -> Path:
-        return REPOSITORY_ROOT / "results" / (
-            f"{self.user_limit}_{self.item_limit}"
-        )
+    def dataset_results_dir(self) -> Path:
+        return self.experiment_dir / self.dataset_dir.name
+
+    @property
+    def models_dir(self) -> Path:
+        return self.dataset_results_dir / "models"
+
+    @property
+    def checkpoint_path(self) -> Path:
+        return self.models_dir / f"{self.MODEL_NAME.casefold()}.pth"

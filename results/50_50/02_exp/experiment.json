@@ -1,0 +1,50 @@
+{
+  "completed_at": "2026-09-19T14:48:02.618633+00:00",
+  "created_at": "2026-09-19T14:40:55.769190+00:00",
+  "datasets": {
+    "lastfm": {
+      "models": {
+        "multivae": {
+          "checkpoint": "lastfm/models/multivae.pth",
+          "sha256": "919faf22bee6391fc7ad975be718f681809273bb825564367c0b2bd5a8a6d7b3"
+        },
+        "neumf": {
+          "checkpoint": "lastfm/models/neumf.pth",
+          "sha256": "3e8ecac32a391c832c6d77bda892bbdf233d106bd8f8e3f4ae7933540ceea3fa"
+        }
+      },
+      "sha256": "51ea42b097cc121283bbb14643ba7514e008caf331ac9f08934a76c4b12a58fe",
+      "snapshot": "lastfm/data/lastfm",
+      "split_statistics": {
+        "development_interactions": 378,
+        "folds": 5,
+        "test_interactions": 66,
+        "users": 50
+      }
+    },
+    "yelp": {
+      "models": {
+        "multivae": {
+          "checkpoint": "yelp/models/multivae.pth",
+          "sha256": "819972f21f52bf54c246ba5608f11a858cc62ed46f95e5189c3e5807e08a2753"
+        },
+        "neumf": {
+          "checkpoint": "yelp/models/neumf.pth",
+          "sha256": "3b90029d80b80853886c64b5683be353343cc4e6ee4ec9add0cd6c884fc3c563"
+        }
+      },
+      "sha256": "1fb2941051c5c753b57a75f0976bddd6b6ae5f121079b2da3c084a92c8cd6236",
+      "snapshot": "yelp/data/yelp",
+      "split_statistics": {
+        "development_interactions": 303,
+        "folds": 5,
+        "test_interactions": 52,
+        "users": 50
+      }
+    }
+  },
+  "experiment": "02_exp",
+  "item_limit": 50,
+  "status": "complete",
+  "user_limit": 50
+}

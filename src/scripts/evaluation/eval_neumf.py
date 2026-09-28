@@ -4,6 +4,7 @@ from pathlib import Path
 from src.evaluators.neumf_evaluator import NeuMFEvaluator
 from src.splitters.lastfm_cross_val import LastFMCrossValidationSplitter
 from src.splitters.yelp_cross_val import YelpCrossValidationSplitter
+from src.utils.experiments import resolve_experiment
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -31,6 +32,12 @@ def parse_arguments():
         choices=("all", *DATASETS),
         default="all",
         help="Dataset to evaluate (default: all).",
+    )
+
+    parser.add_argument(
+        "--experiment",
+        required=True,
+        help="Versioned experiment identifier, for example 01_exp.",
     )
     
     parser.add_argument(
@@ -80,6 +87,11 @@ def main():
 
     hyperparameter_config_path = REPOSITORY_ROOT / "config/hyperparameters/neumf.yaml"
     dataset_names = DATASETS if arguments.dataset == "all" else (arguments.dataset,)
+    experiment_dir = resolve_experiment(
+        arguments.user_limit,
+        arguments.item_limit,
+        arguments.experiment,
+    )
 
     for dataset_index, dataset_name in enumerate(dataset_names):
         settings = DATASETS[dataset_name]
@@ -88,11 +100,12 @@ def main():
         print(f"= {dataset_index + 5}. EVALUATING NeuMF ON {dataset_name.upper()}")
         print("=" * 70 + "\n")
 
-        dataset_dir = REPOSITORY_ROOT / "data/sample" / dataset_name
+        dataset_dir = experiment_dir / dataset_name / "data" / dataset_name
         config_path = REPOSITORY_ROOT / "config/models" / settings["config"]
 
         evaluator = NeuMFEvaluator(
             dataset_dir=dataset_dir,
+            experiment_dir=experiment_dir,
             user_limit=arguments.user_limit,
             item_limit=arguments.item_limit,
             config_path=config_path,

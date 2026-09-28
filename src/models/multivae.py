@@ -83,14 +83,13 @@ class MultiVAE(RecBoleMultiVAE):
         """
         users = interaction[self.USER_ID]
         items = interaction[self.ITEM_ID]
-        
-        rating_matrix = self.get_rating_matrix(users)
+
+        unique_users, user_rows = torch.unique(users, return_inverse=True)
+        rating_matrix = self.get_rating_matrix(unique_users)
         logits, _, _ = self.forward(rating_matrix)
         predictions = self.to_rating(logits)
-        
-        rows = torch.arange(items.shape[0], device=predictions.device)
-        
-        return predictions[rows, items]
+
+        return predictions[user_rows, items]
 
     def full_sort_predict(self, interaction):
         """

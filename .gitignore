@@ -21,3 +21,6 @@ log_tensorboard/
 
 # Models
 saved/
+
+results/**/data/
+results/**/models/

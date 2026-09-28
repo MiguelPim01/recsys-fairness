@@ -1,0 +1,124 @@
+{
+  "users": 50,
+  "items": 50,
+  "interactions": 355,
+  "density": "14.200000%",
+  "groupings": {
+    "activity": {
+      "active": {
+        "users": 42,
+        "percentage": "84.00%"
+      },
+      "inactive": {
+        "users": 8,
+        "percentage": "16.00%"
+      }
+    },
+    "friend_count": {
+      "no_friends": {
+        "users": 1,
+        "percentage": "2.00%"
+      },
+      "1_10": {
+        "users": 2,
+        "percentage": "4.00%"
+      },
+      "11_100": {
+        "users": 10,
+        "percentage": "20.00%"
+      },
+      "101_plus": {
+        "users": 37,
+        "percentage": "74.00%"
+      }
+    },
+    "fans": {
+      "0_1": {
+        "users": 7,
+        "percentage": "14.00%"
+      },
+      "2_7": {
+        "users": 4,
+        "percentage": "8.00%"
+      },
+      "8_13": {
+        "users": 6,
+        "percentage": "12.00%"
+      },
+      "14_plus": {
+        "users": 33,
+        "percentage": "66.00%"
+      }
+    },
+    "tenure": {
+      "under_1": {
+        "users": 0,
+        "percentage": "0.00%"
+      },
+      "1_3": {
+        "users": 0,
+        "percentage": "0.00%"
+      },
+      "3_5": {
+        "users": 0,
+        "percentage": "0.00%"
+      },
+      "5_plus": {
+        "users": 50,
+        "percentage": "100.00%"
+      }
+    },
+    "kmeans": {
+      "group_1": {
+        "users": 10,
+        "percentage": "20.00%"
+      },
+      "group_2": {
+        "users": 40,
+        "percentage": "80.00%"
+      }
+    },
+    "agglomerative": {
+      "group_1": {
+        "users": 8,
+        "percentage": "16.00%"
+      },
+      "group_2": {
+        "users": 42,
+        "percentage": "84.00%"
+      }
+    }
+  },
+  "clustering": {
+    "kmeans": {
+      "selected_k": 2,
+      "selected_silhouette": 0.3768252698880582,
+      "silhouette_by_k": {
+        "2": 0.3768252698880582,
+        "3": 0.27637879790181397,
+        "4": 0.26002948479716836,
+        "5": 0.2732538124198285,
+        "6": 0.30295885191959604,
+        "7": 0.30805057841651706,
+        "8": 0.2852233076678685,
+        "9": 0.290768538559991,
+        "10": 0.2673409862883138
+      }
+    },
+    "agglomerative": {
+      "selected_k": 2,
+      "selected_silhouette": 0.39188713457689395,
+      "silhouette_by_k": {
+        "2": 0.39188713457689395,
+        "3": 0.24380434760573394,
+        "4": 0.25256269224377936,
+        "5": 0.26227666838136143,
+        "6": 0.29274102521859413,
+        "7": 0.2984103370662712,
+        "8": 0.2836562900182724,
+        "9": 0.2893895674750751,
+        "10": 0.2852240423685268
+      }
+    }
+  }
+}

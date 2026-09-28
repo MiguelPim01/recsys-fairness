@@ -35,7 +35,19 @@ Possible flag values:
 - `ITEM_LIMIT`: Quantity of items to be used for experimenting. Defaults to 1000.
 - `USE_RESTAURANTS_USERS_ONLY`: Wether to use only users that have a strong preference for restaurants. Defaults to false.
 
-This will run the experiment pipeline for all models and datasets.
+This creates the next versioned experiment (`01_exp`, `02_exp`, and so on) and
+runs the pipeline for all models and datasets. Every execution is self-contained:
+
+```text
+results/<users>_<items>/<NN_exp>/<dataset>/
+├── data/<dataset>/
+├── models/{neumf,multivae}.pth
+├── results.json
+└── k_clusters_fairness.json
+```
+
+The stored dataset snapshot guarantees that the checkpoints can be analyzed even
+after `data/sample` is replaced.
 
 You can also run each script separately.
 
@@ -51,10 +63,12 @@ Possible flags:
    - `dataset`: The dataset to transform [`all`|`lastfm`|`yelp`]. Defaults to `all`.
    - `--use-restaurants-users-only`: Keep only Yelp users whose predominant preference is restaurants or food. Supported by `yelp` and `all`.
 
-2. **Run the following script for sampling the dataset**:
+2. **Create an experiment and sample the dataset**:
 
 ```bash
-./scripts/sample_datasets.sh <dataset>
+EXPERIMENT=$(.venv/bin/python -m src.utils.experiments create --user-limit <N> --item-limit <M>)
+./scripts/sample_datasets.sh <dataset> --experiment "$EXPERIMENT" --user-limit <N> --item-limit <M>
+.venv/bin/python -m src.utils.experiments snapshot --dataset <dataset> --experiment "$EXPERIMENT" --user-limit <N> --item-limit <M>
 ```
 Possible flags:
    - `dataset`: The dataset to transform [`all`|`lastfm`|`yelp`]. Defaults to `all`.
@@ -63,23 +77,34 @@ Possible flags:
 
 1. **Run the script**:
 ```bash
-./scripts/evaluate_models.sh --model <MODEL> --dataset <DATASET> --cross-validation --hyperparameter-search --folds N
+./scripts/evaluate_models.sh --model <MODEL> --dataset <DATASET> --experiment <NN_exp> --user-limit <N> --item-limit <M> --cross-validation --hyperparameter-search --folds N
 ```
 
 Possible flags:
 - `--model`: Choose `neumf`, `multivae`, or `all`. Defaults to `neumf`.
 - `--dataset`: Choose `all`, `lastfm`, or `yelp`. Defaults to `all`.
+- `--experiment`: Versioned experiment containing the dataset snapshot. Required.
 - `--cross-validation`: Run user-stratified cross-validation.
 - `--hyperparameter-search`: Search configurations from the model search YAML.
 - `--folds`: Number of cross-validation folds. Defaults to `5`.
 
-All results will be persisted in files `results/results_<dataset>.json`. Graphics and data tables are persisted in folders `results/<dataset>/`.
+Validation ranks each positive interaction against 100 uniformly sampled
+negative items (`uni100`). Hyperparameter selection therefore uses sampled
+Recall, NDCG, and MRR. The final test and group-fairness analysis use full-sort
+evaluation over the complete item catalog.
 
-Existing results can be rendered again without retraining:
+Training only writes the final checkpoints. Fairness analysis is a separate step
+that can be rerun without training:
 
 ```bash
-uv run python -m src.utils.results --dataset lastfm
-uv run python -m src.utils.results --dataset yelp
+./scripts/analyze_fairness.sh --model all --dataset all --experiment <NN_exp> --user-limit <N> --item-limit <M>
+```
+
+The complete `make run_experiments` target invokes this analysis automatically.
+To analyze an existing experiment through Make:
+
+```bash
+make analyze_experiment USER_LIMIT=<N> ITEM_LIMIT=<M> EXPERIMENT=<NN_exp>
 ```
 
 ## Architecture

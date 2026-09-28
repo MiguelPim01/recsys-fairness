@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 
 from src.sampler.lastfm_sampler import LastFMSampler
+from src.utils.experiments import resolve_experiment
 from src.utils.sample_statistics import generate_sample_statistics
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -26,10 +27,9 @@ def parse_arguments():
     )
 
     parser.add_argument(
-        "--results-dir",
-        type=Path,
-        default=REPOSITORY_ROOT / "results",
-        help="Root directory where sample statistics will be written.",
+        "--experiment",
+        required=True,
+        help="Versioned experiment identifier, for example 01_exp.",
     )
     
     parser.add_argument(
@@ -76,12 +76,12 @@ def main():
     )
     statistics = sampler.create_sample()
 
-    statistics_output_dir = (
-        arguments.results_dir
-        / f"{arguments.user_limit}_{arguments.item_limit}"
-        / "lastfm"
-        / "sample_statistics"
+    experiment_dir = resolve_experiment(
+        arguments.user_limit,
+        arguments.item_limit,
+        arguments.experiment,
     )
+    statistics_output_dir = experiment_dir / "lastfm" / "sample_statistics"
     generate_sample_statistics(
         sample_dir=arguments.output_dir,
         dataset="lastfm",
