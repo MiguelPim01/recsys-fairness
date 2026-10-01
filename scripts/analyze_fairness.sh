@@ -22,7 +22,7 @@ Options:
   --dataset DATASET      Dataset to analyze: lastfm, yelp, or all (default: all).
   --user-limit N         Experiment user limit (default: 1000).
   --item-limit N         Experiment item limit (default: 1000).
-  --experiment NN_exp    Versioned experiment to analyze (required).
+  --experiment seed_k    Seed-based experiment to analyze (required).
   -h, --help             Show this help message.
 EOF
 }

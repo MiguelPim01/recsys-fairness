@@ -16,10 +16,9 @@ from src.models.multivae import MultiVAE
 from src.models.neumf import NeuMF
 from src.utils.experiments import (
     resolve_experiment,
-    validate_dataset_snapshot,
+    validate_experiment_dataset,
     validate_model_checkpoint,
 )
-
 
 MODELS = {
     "neumf": ("NeuMF", NeuMF),
@@ -30,6 +29,7 @@ DATASETS = ("lastfm", "yelp")
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description=__doc__)
+    
     parser.add_argument(
         "--dataset",
         choices=("all", *DATASETS),
@@ -40,20 +40,23 @@ def parse_arguments():
         choices=("all", *MODELS),
         default="all",
     )
+    
     parser.add_argument("--user-limit", type=int, required=True)
     parser.add_argument("--item-limit", type=int, required=True)
+    
     parser.add_argument(
         "--experiment",
         required=True,
-        help="Versioned experiment identifier, for example 01_exp.",
+        help="Seed-based experiment identifier, for example seed_42.",
     )
+    
     return parser.parse_args()
 
 
-def analyze_checkpoint(experiment_dir: Path, dataset_name: str, model_key: str):
+def analyze_checkpoint(experiment_dir: Path, dataset_dir: Path, dataset_name: str, model_key: str):
     model_name, model_class = MODELS[model_key]
     dataset_output_dir = experiment_dir / dataset_name
-    dataset_dir = dataset_output_dir / "data" / dataset_name
+    
     checkpoint_path = validate_model_checkpoint(
         experiment_dir,
         dataset_name,
@@ -120,17 +123,20 @@ def analyze_checkpoint(experiment_dir: Path, dataset_name: str, model_key: str):
 
 def main():
     arguments = parse_arguments()
+    
     warnings.filterwarnings("ignore", category=FutureWarning, module=r"recbole\..*")
+    
     experiment_dir = resolve_experiment(
         arguments.user_limit,
         arguments.item_limit,
         arguments.experiment,
     )
+    
     datasets = DATASETS if arguments.dataset == "all" else (arguments.dataset,)
     models = MODELS if arguments.model == "all" else (arguments.model,)
 
     for dataset_name in datasets:
-        validate_dataset_snapshot(experiment_dir, dataset_name)
+        dataset_dir = validate_experiment_dataset(experiment_dir, dataset_name)
         for model_key in models:
             print(
                 f"Analyzing {model_key} on {dataset_name} "
@@ -138,6 +144,7 @@ def main():
             )
             results_path = analyze_checkpoint(
                 experiment_dir,
+                dataset_dir,
                 dataset_name,
                 model_key,
             )

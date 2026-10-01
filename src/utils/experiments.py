@@ -1,4 +1,4 @@
-"""Create and resolve immutable, versioned experiment directories."""
+"""Create and resolve immutable experiments identified by their random seed."""
 
 import argparse
 import fcntl
@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,9 +13,9 @@ from pathlib import Path
 from src.splitters.lastfm_cross_val import LastFMCrossValidationSplitter
 from src.splitters.yelp_cross_val import YelpCrossValidationSplitter
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-EXPERIMENT_PATTERN = re.compile(r"^(\d+)_exp$")
+EXPERIMENT_PATTERN = re.compile(r"^seed_(\d+)$")
+LEGACY_EXPERIMENT_PATTERN = re.compile(r"^\d+_exp$")
 SPLITTERS = {
     "lastfm": LastFMCrossValidationSplitter,
     "yelp": YelpCrossValidationSplitter,
@@ -27,14 +26,17 @@ def experiment_root(user_limit: int, item_limit: int) -> Path:
     return REPOSITORY_ROOT / "results" / f"{user_limit}_{item_limit}"
 
 
-def resolve_experiment(
-    user_limit: int,
-    item_limit: int,
-    experiment: str,
-) -> Path:
-    if EXPERIMENT_PATTERN.fullmatch(experiment) is None:
+def sample_root(user_limit: int, item_limit: int, experiment: str) -> Path:
+    return REPOSITORY_ROOT / "data" / "sample" / f"{user_limit}_{item_limit}" / experiment
+
+
+def resolve_experiment(user_limit: int, item_limit: int, experiment: str) -> Path:
+    if (
+        EXPERIMENT_PATTERN.fullmatch(experiment) is None
+        and LEGACY_EXPERIMENT_PATTERN.fullmatch(experiment) is None
+    ):
         raise ValueError(
-            "Experiment must use the NN_exp format, for example 01_exp"
+            "Experiment must use the seed_k format, for example seed_42"
         )
 
     path = experiment_root(user_limit, item_limit) / experiment
@@ -42,89 +44,72 @@ def resolve_experiment(
         raise FileNotFoundError(f"Experiment directory not found: {path}")
     if not (path / "experiment.json").is_file():
         raise FileNotFoundError(f"Experiment manifest not found: {path}")
+    
     return path
 
 
-def create_experiment(user_limit: int, item_limit: int) -> Path:
+def create_experiment(user_limit: int, item_limit: int, seed: int) -> Path:
+    if seed < 0:
+        raise ValueError("Seed must be a non-negative integer")
+
     root = experiment_root(user_limit, item_limit)
     root.mkdir(parents=True, exist_ok=True)
-    lock_path = root / ".experiments.lock"
 
-    with lock_path.open("a+") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        indexes = [
-            int(match.group(1))
-            for child in root.iterdir()
-            if child.is_dir()
-            and (match := EXPERIMENT_PATTERN.fullmatch(child.name)) is not None
-        ]
-        index = max(indexes, default=0) + 1
-        path = root / f"{index:02d}_exp"
+    path = root / f"seed_{seed}"
+    try:
         path.mkdir()
-        _atomic_json_write(
-            path / "experiment.json",
-            {
-                "experiment": path.name,
-                "user_limit": user_limit,
-                "item_limit": item_limit,
-                "status": "created",
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "datasets": {},
-            },
-        )
+    except FileExistsError:
+        raise FileExistsError(
+            f"Experiment already exists and will not be overwritten: {path}"
+        ) from None
+    _atomic_json_write(
+        path / "experiment.json",
+        {
+            "experiment": path.name,
+            "seed": seed,
+            "user_limit": user_limit,
+            "item_limit": item_limit,
+            "status": "created",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "datasets": {},
+        },
+    )
 
     return path
 
 
-def snapshot_dataset(
-    experiment_dir: Path,
-    source_root: Path,
-    dataset: str,
-    folds: int,
-    seed: int,
-) -> Path:
-    source_dir = source_root / dataset
+def experiment_seed(experiment_dir: Path) -> int:
+    manifest = _read_json(experiment_dir / "experiment.json")
+    seed = manifest.get("seed")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        if LEGACY_EXPERIMENT_PATTERN.fullmatch(experiment_dir.name):
+            return 42
+        raise ValueError(f"Experiment manifest has an invalid seed: {experiment_dir}")
+    return seed
+
+
+def prepare_dataset(experiment_dir: Path, dataset: str, folds: int) -> Path:
+    manifest_path = experiment_dir / "experiment.json"
+    manifest = _read_json(manifest_path)
+    source_dir = sample_root(
+        manifest["user_limit"],
+        manifest["item_limit"],
+        experiment_dir.name,
+    ) / dataset
     if not source_dir.is_dir():
         raise FileNotFoundError(f"Sample directory not found: {source_dir}")
 
     splitter = SPLITTERS[dataset](
         dataset_dir=source_dir,
         n_splits=folds,
-        seed=seed,
+        seed=experiment_seed(experiment_dir),
     )
     split_statistics = splitter.prepare()
 
-    dataset_output_dir = experiment_dir / dataset
-    snapshot_parent = dataset_output_dir / "data"
-    snapshot_dir = snapshot_parent / dataset
-    if snapshot_dir.exists():
-        raise FileExistsError(
-            f"Dataset snapshot already exists and will not be overwritten: "
-            f"{snapshot_dir}"
-        )
-
-    snapshot_parent.mkdir(parents=True, exist_ok=True)
-    temporary_dir = Path(
-        tempfile.mkdtemp(prefix=f".{dataset}.", suffix=".tmp", dir=snapshot_parent)
-    )
-    try:
-        for source_path in source_dir.iterdir():
-            destination = temporary_dir / source_path.name
-            if source_path.is_dir():
-                shutil.copytree(source_path, destination)
-            else:
-                shutil.copy2(source_path, destination)
-        os.replace(temporary_dir, snapshot_dir)
-    except Exception:
-        shutil.rmtree(temporary_dir, ignore_errors=True)
-        raise
-
-    manifest_path = experiment_dir / "experiment.json"
-    manifest = _read_json(manifest_path)
     manifest["status"] = "prepared"
     manifest.setdefault("datasets", {})[dataset] = {
-        "snapshot": str(snapshot_dir.relative_to(experiment_dir)),
-        "sha256": _directory_sha256(snapshot_dir),
+        "sample": str(source_dir.relative_to(REPOSITORY_ROOT)),
+        "sha256": _directory_sha256(source_dir),
         "split_statistics": {
             key: value
             for key, value in split_statistics.items()
@@ -132,7 +117,7 @@ def snapshot_dataset(
         },
     }
     _atomic_json_write(manifest_path, manifest)
-    return snapshot_dir
+    return source_dir
 
 
 def set_experiment_status(experiment_dir: Path, status: str) -> None:
@@ -165,25 +150,32 @@ def register_model(
         _atomic_json_write(manifest_path, manifest)
 
 
-def validate_dataset_snapshot(experiment_dir: Path, dataset: str) -> Path:
+def validate_experiment_dataset(experiment_dir: Path, dataset: str) -> Path:
     manifest = _read_json(experiment_dir / "experiment.json")
     try:
         entry = manifest["datasets"][dataset]
-        snapshot_dir = experiment_dir / entry["snapshot"]
         expected_hash = entry["sha256"]
     except (KeyError, TypeError) as error:
         raise ValueError(
-            f"Experiment manifest has no snapshot for {dataset}"
+            f"Experiment manifest has no dataset for {dataset}"
         ) from error
-    if not snapshot_dir.is_dir():
-        raise FileNotFoundError(f"Dataset snapshot not found: {snapshot_dir}")
-    actual_hash = _directory_sha256(snapshot_dir)
+
+    if "sample" in entry:
+        dataset_dir = REPOSITORY_ROOT / entry["sample"]
+    elif "snapshot" in entry:
+        dataset_dir = experiment_dir / entry["snapshot"]
+    else:
+        raise ValueError(f"Experiment manifest has no dataset path for {dataset}")
+
+    if not dataset_dir.is_dir():
+        raise FileNotFoundError(f"Experiment dataset not found: {dataset_dir}")
+    actual_hash = _directory_sha256(dataset_dir)
     if actual_hash != expected_hash:
         raise ValueError(
-            f"Dataset snapshot checksum mismatch for {dataset}: "
+            f"Dataset checksum mismatch for {dataset}: "
             f"{actual_hash} != {expected_hash}"
         )
-    return snapshot_dir
+    return dataset_dir
 
 
 def validate_model_checkpoint(
@@ -268,19 +260,14 @@ def _parse_arguments():
     create = subparsers.add_parser("create")
     create.add_argument("--user-limit", type=int, required=True)
     create.add_argument("--item-limit", type=int, required=True)
+    create.add_argument("--seed", type=int, default=42)
 
-    snapshot = subparsers.add_parser("snapshot")
-    snapshot.add_argument("--user-limit", type=int, required=True)
-    snapshot.add_argument("--item-limit", type=int, required=True)
-    snapshot.add_argument("--experiment", required=True)
-    snapshot.add_argument("--dataset", choices=("all", *SPLITTERS), default="all")
-    snapshot.add_argument(
-        "--source-root",
-        type=Path,
-        default=REPOSITORY_ROOT / "data/sample",
-    )
-    snapshot.add_argument("--folds", type=int, default=5)
-    snapshot.add_argument("--seed", type=int, default=42)
+    prepare = subparsers.add_parser("prepare")
+    prepare.add_argument("--user-limit", type=int, required=True)
+    prepare.add_argument("--item-limit", type=int, required=True)
+    prepare.add_argument("--experiment", required=True)
+    prepare.add_argument("--dataset", choices=("all", *SPLITTERS), default="all")
+    prepare.add_argument("--folds", type=int, default=5)
 
     status = subparsers.add_parser("status")
     status.add_argument("--user-limit", type=int, required=True)
@@ -293,7 +280,11 @@ def _parse_arguments():
 def main():
     arguments = _parse_arguments()
     if arguments.command == "create":
-        path = create_experiment(arguments.user_limit, arguments.item_limit)
+        path = create_experiment(
+            arguments.user_limit,
+            arguments.item_limit,
+            arguments.seed,
+        )
         print(path.name)
         return
 
@@ -308,12 +299,10 @@ def main():
 
     datasets = SPLITTERS if arguments.dataset == "all" else (arguments.dataset,)
     for dataset in datasets:
-        path = snapshot_dataset(
+        path = prepare_dataset(
             experiment_dir=experiment_dir,
-            source_root=arguments.source_root,
             dataset=dataset,
             folds=arguments.folds,
-            seed=arguments.seed,
         )
         print(f"{dataset}: {path}")
 

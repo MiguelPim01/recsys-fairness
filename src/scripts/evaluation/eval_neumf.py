@@ -4,7 +4,11 @@ from pathlib import Path
 from src.evaluators.neumf_evaluator import NeuMFEvaluator
 from src.splitters.lastfm_cross_val import LastFMCrossValidationSplitter
 from src.splitters.yelp_cross_val import YelpCrossValidationSplitter
-from src.utils.experiments import resolve_experiment
+from src.utils.experiments import (
+    experiment_seed,
+    resolve_experiment,
+    validate_experiment_dataset,
+)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -37,7 +41,7 @@ def parse_arguments():
     parser.add_argument(
         "--experiment",
         required=True,
-        help="Versioned experiment identifier, for example 01_exp.",
+        help="Seed-based experiment identifier, for example seed_42.",
     )
     
     parser.add_argument(
@@ -100,7 +104,7 @@ def main():
         print(f"= {dataset_index + 5}. EVALUATING NeuMF ON {dataset_name.upper()}")
         print("=" * 70 + "\n")
 
-        dataset_dir = experiment_dir / dataset_name / "data" / dataset_name
+        dataset_dir = validate_experiment_dataset(experiment_dir, dataset_name)
         config_path = REPOSITORY_ROOT / "config/models" / settings["config"]
 
         evaluator = NeuMFEvaluator(
@@ -108,6 +112,7 @@ def main():
             experiment_dir=experiment_dir,
             user_limit=arguments.user_limit,
             item_limit=arguments.item_limit,
+            seed=experiment_seed(experiment_dir),
             config_path=config_path,
             hp_search_config_path=hyperparameter_config_path,
             cross_validation_splitter=settings["splitter"],

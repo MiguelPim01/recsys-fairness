@@ -1,5 +1,9 @@
 import csv
+import hashlib
+import json
+import os
 import random
+import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -11,13 +15,16 @@ class IDatasetSampler:
 
     DATASET_NAME = None
 
-    def __init__(self, source_dir, output_dir, user_limit, item_limit, seed=42, minimum_user_interactions=6):
+    MANIFEST_VERSION = 1
+
+    def __init__(self, source_dir, output_dir, user_limit, item_limit, seed=42, minimum_user_interactions=6, source_variant=None):
         self.source_dir = Path(source_dir)
         self.output_dir = Path(output_dir)
         self.user_limit = user_limit
         self.item_limit = item_limit
         self.seed = seed
         self.minimum_user_interactions = minimum_user_interactions
+        self.source_variant = source_variant
 
     def create_sample(self):
         """
@@ -27,6 +34,16 @@ class IDatasetSampler:
         Returns:
             statistics: Statistics about the sampling process.
         """
+        reusable_statistics = self._reusable_statistics()
+        if reusable_statistics is not None:
+            return {**reusable_statistics, "reused": True}
+
+        if self.output_dir.exists() and any(self.output_dir.iterdir()):
+            raise FileExistsError(
+                "Sample directory exists but is incomplete or incompatible and "
+                f"will not be overwritten: {self.output_dir}"
+            )
+
         # 1. Define data paths and count the number of rows in each file
         interaction_path = self.source_dir / f"{self.DATASET_NAME}.inter"
         user_path = self.source_dir / f"{self.DATASET_NAME}.user"
@@ -86,7 +103,7 @@ class IDatasetSampler:
         matrix_size = len(selected_users) * len(selected_items)
         density = interaction_count / matrix_size * 100
 
-        return {
+        statistics = {
             "source_interactions": source_interactions,
             "eligible_users": len(eligible_users),
             "selected_users": len(selected_users),
@@ -97,6 +114,93 @@ class IDatasetSampler:
             "seed": self.seed,
             "minimum_user_interactions": self.minimum_user_interactions,
         }
+        self._write_manifest(statistics)
+        return {**statistics, "reused": False}
+
+    @property
+    def manifest_path(self):
+        return self.output_dir / f"{self.DATASET_NAME}.sample_manifest.json"
+
+    def _manifest_configuration(self):
+        return {
+            "version": self.MANIFEST_VERSION,
+            "dataset": self.DATASET_NAME,
+            "user_limit": self.user_limit,
+            "item_limit": self.item_limit,
+            "seed": self.seed,
+            "minimum_user_interactions": self.minimum_user_interactions,
+            "source_variant": self.source_variant,
+        }
+
+    def _reusable_statistics(self):
+        if not self.manifest_path.is_file():
+            return None
+
+        try:
+            with self.manifest_path.open(encoding="utf-8") as input_file:
+                manifest = json.load(input_file)
+        except (json.JSONDecodeError, OSError):
+            return None
+
+        configuration = self._manifest_configuration()
+        if any(manifest.get(key) != value for key, value in configuration.items()):
+            return None
+
+        expected_hashes = manifest.get("files")
+        statistics = manifest.get("statistics")
+        if not isinstance(expected_hashes, dict) or not isinstance(statistics, dict):
+            return None
+
+        for suffix, expected_hash in expected_hashes.items():
+            path = self.output_dir / f"{self.DATASET_NAME}.{suffix}"
+            if not path.is_file() or self._sha256(path) != expected_hash:
+                return None
+
+        if set(expected_hashes) != {"inter", "item", "user"}:
+            return None
+        
+        return statistics
+
+    def _write_manifest(self, statistics):
+        document = {
+            **self._manifest_configuration(),
+            "files": {
+                suffix: self._sha256(
+                    self.output_dir / f"{self.DATASET_NAME}.{suffix}"
+                )
+                for suffix in ("inter", "item", "user")
+            },
+            "statistics": statistics,
+        }
+
+        temporary_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self.output_dir,
+                prefix=f".{self.manifest_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as output_file:
+                temporary_path = Path(output_file.name)
+                json.dump(document, output_file, indent=2, sort_keys=True)
+                output_file.write("\n")
+                output_file.flush()
+                os.fsync(output_file.fileno())
+            os.replace(temporary_path, self.manifest_path)
+        except Exception:
+            if temporary_path is not None and temporary_path.exists():
+                temporary_path.unlink()
+            raise
+
+    @staticmethod
+    def _sha256(path):
+        digest = hashlib.sha256()
+        with path.open("rb") as input_file:
+            for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
 
     def _select_items(self, interaction_path, interaction_total):
         """

@@ -14,7 +14,7 @@ class LastFMSampler(IDatasetSampler):
 
     DATASET_NAME = "lastfm"
 
-    def __init__(self, source_dir, output_dir, user_limit, item_limit, seed=42, minimum_user_interactions=6):
+    def __init__(self, source_dir, output_dir, user_limit, item_limit, seed=42, minimum_user_interactions=6, source_variant=None):
         super().__init__(
             source_dir,
             output_dir,
@@ -22,6 +22,7 @@ class LastFMSampler(IDatasetSampler):
             item_limit,
             seed,
             minimum_user_interactions,
+            source_variant,
         )
 
     def _write_interactions(self, source_path, output_path, selected_users, selected_items, interaction_total):

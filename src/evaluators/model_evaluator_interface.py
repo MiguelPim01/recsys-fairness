@@ -28,7 +28,7 @@ class IModelEvaluator:
     MODEL_CLASS = None
     HYPERPARAMETER_LABELS: ClassVar[dict] = {}
 
-    def __init__(self, dataset_dir, experiment_dir, user_limit, item_limit, config_path, hp_search_config_path, cross_validation_splitter = None):
+    def __init__(self, dataset_dir, experiment_dir, user_limit, item_limit, seed, config_path, hp_search_config_path, cross_validation_splitter = None):
         self.dataset_dir = Path(dataset_dir)
         self.experiment_dir = Path(experiment_dir)
         self.config_path = Path(config_path)
@@ -36,6 +36,7 @@ class IModelEvaluator:
         self.cross_validation_splitter = cross_validation_splitter
         self.user_limit = user_limit
         self.item_limit = item_limit
+        self.seed = seed
 
     def evaluate(self, cross_validation=False, hyperparameter_search=False, n_splits=5, estimate_runtime=False, dataset_count=1, fold_workers=1):
         """
@@ -484,6 +485,7 @@ class IModelEvaluator:
         config_dict = {
             "data_path": str(self.dataset_dir.parent.resolve()),
             "checkpoint_dir": str(self.models_dir.resolve()),
+            "seed": self.seed,
             **(overrides or {}),
         }
         

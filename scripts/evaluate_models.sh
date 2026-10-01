@@ -22,7 +22,7 @@ Train and evaluate recommendation models.
 Options:
   --model MODEL              Model to evaluate: neumf, multivae, or all in parallel (default: neumf).
   --dataset DATASET          Dataset to evaluate: all, lastfm, or yelp (default: all).
-  --experiment NN_exp        Versioned experiment containing the dataset snapshot (required).
+  --experiment seed_k        Seed-based experiment containing the prepared sample (required).
   --user-limit N             Number of sampled users (default: 1000).
   --item-limit N             Number of sampled items (default: 1000).
   --cross-validation         Run user-stratified cross-validation.
@@ -32,14 +32,14 @@ Options:
   -h, --help                 Show this help message.
 
 Examples:
-  scripts/evaluate_models.sh --experiment 01_exp
-  scripts/evaluate_models.sh --experiment 01_exp --model multivae
-  scripts/evaluate_models.sh --experiment 01_exp --model all --dataset yelp
-  scripts/evaluate_models.sh --experiment 01_exp --cross-validation
-  scripts/evaluate_models.sh --experiment 01_exp --hyperparameter-search
-  scripts/evaluate_models.sh --experiment 01_exp --cross-validation --hyperparameter-search
-  scripts/evaluate_models.sh --experiment 01_exp --cross-validation --folds 3
-  scripts/evaluate_models.sh --experiment 01_exp --cross-validation --fold-workers 2
+  scripts/evaluate_models.sh --experiment seed_42
+  scripts/evaluate_models.sh --experiment seed_42 --model multivae
+  scripts/evaluate_models.sh --experiment seed_42 --model all --dataset yelp
+  scripts/evaluate_models.sh --experiment seed_42 --cross-validation
+  scripts/evaluate_models.sh --experiment seed_42 --hyperparameter-search
+  scripts/evaluate_models.sh --experiment seed_42 --cross-validation --hyperparameter-search
+  scripts/evaluate_models.sh --experiment seed_42 --cross-validation --folds 3
+  scripts/evaluate_models.sh --experiment seed_42 --cross-validation --fold-workers 2
 EOF
 }
 
