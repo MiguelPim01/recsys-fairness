@@ -27,27 +27,36 @@ uv sync
 
 You can run all the experiments with the command:
 ```bash
-make run_experiments USER_LIMIT=<N> ITEM_LIMIT=<M> USE_RESTAURANTS_USERS_ONLY=<flag>
+make run_experiments USER_LIMIT=<N> ITEM_LIMIT=<M> SEED=<K> USE_RESTAURANTS_USERS_ONLY=<flag>
 ```
 
 Possible flag values:
 - `USER_LIMIT`: Quantity of users to be used for experimenting. Defaults to 1000.
 - `ITEM_LIMIT`: Quantity of items to be used for experimenting. Defaults to 1000.
+- `SEED`: Random seed used by sampling, splits, training, and fairness analysis. Defaults to 42.
 - `USE_RESTAURANTS_USERS_ONLY`: Wether to use only users that have a strong preference for restaurants. Defaults to false.
 
-This creates the next versioned experiment (`01_exp`, `02_exp`, and so on) and
-runs the pipeline for all models and datasets. Every execution is self-contained:
+This creates an experiment identified by its seed and runs the pipeline for all
+models and datasets. Samples are kept separately from result artifacts:
 
 ```text
-results/<users>_<items>/<NN_exp>/<dataset>/
-├── data/<dataset>/
+data/sample/<users>_<items>/seed_<K>/<dataset>/
+├── <dataset>.{inter,item,user}
+├── <dataset>.sample_manifest.json
+└── prepared split files
+
+results/<users>_<items>/seed_<K>/<dataset>/
 ├── models/{neumf,multivae}.pth
 ├── results.json
-└── k_clusters_fairness.json
+├── k_clusters_fairness.json
+└── sample_statistics/
 ```
 
-The stored dataset snapshot guarantees that the checkpoints can be analyzed even
-after `data/sample` is replaced.
+Running the same limits and seed again fails without overwriting the existing
+result. A complete, validated sample is reused without being regenerated.
+Complete transformed files are also reused; for Yelp, the recorded transformation
+mode must match `USE_RESTAURANTS_USERS_ONLY`. `make clean` preserves versioned
+samples and removes only transformed data.
 
 You can also run each script separately.
 
@@ -66,9 +75,9 @@ Possible flags:
 2. **Create an experiment and sample the dataset**:
 
 ```bash
-EXPERIMENT=$(.venv/bin/python -m src.utils.experiments create --user-limit <N> --item-limit <M>)
+EXPERIMENT=$(.venv/bin/python -m src.utils.experiments create --user-limit <N> --item-limit <M> --seed <K>)
 ./scripts/sample_datasets.sh <dataset> --experiment "$EXPERIMENT" --user-limit <N> --item-limit <M>
-.venv/bin/python -m src.utils.experiments snapshot --dataset <dataset> --experiment "$EXPERIMENT" --user-limit <N> --item-limit <M>
+.venv/bin/python -m src.utils.experiments prepare --dataset <dataset> --experiment "$EXPERIMENT" --user-limit <N> --item-limit <M>
 ```
 Possible flags:
    - `dataset`: The dataset to transform [`all`|`lastfm`|`yelp`]. Defaults to `all`.
@@ -77,13 +86,13 @@ Possible flags:
 
 1. **Run the script**:
 ```bash
-./scripts/evaluate_models.sh --model <MODEL> --dataset <DATASET> --experiment <NN_exp> --user-limit <N> --item-limit <M> --cross-validation --hyperparameter-search --folds N
+./scripts/evaluate_models.sh --model <MODEL> --dataset <DATASET> --experiment <seed_k> --user-limit <N> --item-limit <M> --cross-validation --hyperparameter-search --folds N
 ```
 
 Possible flags:
 - `--model`: Choose `neumf`, `multivae`, or `all`. Defaults to `neumf`.
 - `--dataset`: Choose `all`, `lastfm`, or `yelp`. Defaults to `all`.
-- `--experiment`: Versioned experiment containing the dataset snapshot. Required.
+- `--experiment`: Seed-based experiment containing the prepared sample. Required.
 - `--cross-validation`: Run user-stratified cross-validation.
 - `--hyperparameter-search`: Search configurations from the model search YAML.
 - `--folds`: Number of cross-validation folds. Defaults to `5`.
@@ -97,14 +106,14 @@ Training only writes the final checkpoints. Fairness analysis is a separate step
 that can be rerun without training:
 
 ```bash
-./scripts/analyze_fairness.sh --model all --dataset all --experiment <NN_exp> --user-limit <N> --item-limit <M>
+./scripts/analyze_fairness.sh --model all --dataset all --experiment <seed_k> --user-limit <N> --item-limit <M>
 ```
 
 The complete `make run_experiments` target invokes this analysis automatically.
 To analyze an existing experiment through Make:
 
 ```bash
-make analyze_experiment USER_LIMIT=<N> ITEM_LIMIT=<M> EXPERIMENT=<NN_exp>
+make analyze_experiment USER_LIMIT=<N> ITEM_LIMIT=<M> EXPERIMENT=<seed_k>
 ```
 
 ## Architecture
