@@ -78,6 +78,51 @@ def create_experiment(user_limit: int, item_limit: int, seed: int) -> Path:
     return path
 
 
+def create_or_resume_experiment(user_limit: int, item_limit: int, seed: int) -> Path:
+    if seed < 0:
+        raise ValueError("Seed must be a non-negative integer")
+
+    path = experiment_root(user_limit, item_limit) / f"seed_{seed}"
+    if path.is_dir() and (path / "experiment.json").is_file():
+        return path
+    return create_experiment(user_limit, item_limit, seed)
+
+
+def experiment_status(experiment_dir: Path) -> str:
+    """Return the recorded status string of an experiment."""
+    manifest = _read_json(experiment_dir / "experiment.json")
+    return str(manifest.get("status", "unknown"))
+
+
+def is_experiment_complete(user_limit: int, item_limit: int, seed: int) -> bool:
+    """Return True when the seed exists and is marked ``complete``."""
+    path = experiment_root(user_limit, item_limit) / f"seed_{seed}"
+    manifest_path = path / "experiment.json"
+    if not manifest_path.is_file():
+        return False
+    try:
+        return _read_json(manifest_path).get("status") == "complete"
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
+def is_model_trained(experiment_dir: Path, dataset: str, model: str) -> bool:
+    """Return True when a model checkpoint is registered AND verifies on disk."""
+    try:
+        validate_model_checkpoint(experiment_dir, dataset, model)
+        return True
+    except (ValueError, FileNotFoundError):
+        return False
+
+
+def discard_orphan_checkpoint(checkpoint_path: Path) -> None:
+    """Remove a checkpoint file left behind by an interrupted training run."""
+    try:
+        checkpoint_path.unlink()
+    except FileNotFoundError:
+        pass
+
+
 def experiment_seed(experiment_dir: Path) -> int:
     manifest = _read_json(experiment_dir / "experiment.json")
     seed = manifest.get("seed")
@@ -262,6 +307,11 @@ def _parse_arguments():
     create.add_argument("--item-limit", type=int, required=True)
     create.add_argument("--seed", type=int, default=42)
 
+    create_or_resume = subparsers.add_parser("create-or-resume")
+    create_or_resume.add_argument("--user-limit", type=int, required=True)
+    create_or_resume.add_argument("--item-limit", type=int, required=True)
+    create_or_resume.add_argument("--seed", type=int, default=42)
+
     prepare = subparsers.add_parser("prepare")
     prepare.add_argument("--user-limit", type=int, required=True)
     prepare.add_argument("--item-limit", type=int, required=True)
@@ -281,6 +331,15 @@ def main():
     arguments = _parse_arguments()
     if arguments.command == "create":
         path = create_experiment(
+            arguments.user_limit,
+            arguments.item_limit,
+            arguments.seed,
+        )
+        print(path.name)
+        return
+
+    if arguments.command == "create-or-resume":
+        path = create_or_resume_experiment(
             arguments.user_limit,
             arguments.item_limit,
             arguments.seed,

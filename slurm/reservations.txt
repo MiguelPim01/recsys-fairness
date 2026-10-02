@@ -1,0 +1,34 @@
+# =====================================================================
+# recsys-fairness — reservas de máquinas no cluster (fonte de verdade)
+#
+# Espelha a planilha de alocação do cluster. O submit.sh e a
+# auto-resubmissão do run-array.sbatch consultam ESTE arquivo para
+# decidir:
+#   - se uma máquina está reservada por você AGORA (senão, não submete);
+#   - até quando vai a janela vigente (vira o --deadline do job Slurm).
+#
+# Formato (uma janela por linha, campos separados por espaço/tab):
+#
+#     MAQUINA   INICIO             FIM
+#
+#   MAQUINA : hostname exato do nó (ver `sinfo -N`): DSLSERVER00,
+#             DSLSERVER01, LPRMSERVER00, SCISERVER00, SCISERVER01,
+#             SCISERVER02.
+#   INICIO  : início da reserva,  AAAA-MM-DDTHH:MM  (horário do cluster)
+#   FIM     : fim da reserva,     AAAA-MM-DDTHH:MM  (horário do cluster)
+#
+# Regras:
+#   - linhas começando com # e linhas vazias são ignoradas;
+#   - uma mesma máquina pode ter VÁRIAS linhas (reservas não contíguas);
+#   - horários no fuso do cluster (o mesmo que aparece nos logs, -0300);
+#   - o FIM é o prazo duro: nenhum job sobe (nem se reencadeia) para
+#     rodar além do FIM da janela vigente (com uma margem de segurança
+#     configurável em horas, ver submit.sh --min-hours-left).
+#
+# EDITE este arquivo conforme sua alocação na planilha. Os exemplos
+# abaixo são só ilustrativos — troque/remova.
+# =====================================================================
+
+# MAQUINA        INICIO             FIM
+DSLSERVER00    2026-09-02T00:00   2026-09-16T23:59
+DSLSERVER01    2026-09-02T00:00   2026-09-16T23:59

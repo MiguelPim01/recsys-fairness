@@ -28,8 +28,11 @@ eval_args:
   order: RO
   group_by: user
   mode:
-    valid: full
+    valid: uni100
     test: full
+eval_neg_sample_args:
+  distribution: uniform
+  sample_num: 100
 
 metrics: [Recall, NDCG, MRR]
 topk: [5, 10, 20]
