@@ -96,6 +96,9 @@ Possible flags:
 - `--cross-validation`: Run user-stratified cross-validation.
 - `--hyperparameter-search`: Search configurations from the model search YAML.
 - `--folds`: Number of cross-validation folds. Defaults to `5`.
+- `--fold-workers`: Maximum number of validation folds running continuously in
+  parallel across hyperparameter candidates. Defaults to `1` and applies per
+  model process; `--model all` can therefore run up to twice this number.
 
 Validation ranks each positive interaction against 100 uniformly sampled
 negative items (`uni100`). Hyperparameter selection therefore uses sampled

@@ -28,7 +28,7 @@ Options:
   --cross-validation         Run user-stratified cross-validation.
   --hyperparameter-search    Search configurations from the model search YAML.
   --folds N                  Number of cross-validation folds (default: 5).
-  --fold-workers N           Maximum number of folds to run in parallel (default: 1).
+  --fold-workers N           Maximum validation folds running in parallel across candidates (default: 1).
   -h, --help                 Show this help message.
 
 Examples:

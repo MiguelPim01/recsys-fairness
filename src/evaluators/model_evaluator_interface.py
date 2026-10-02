@@ -48,7 +48,8 @@ class IModelEvaluator:
             n_splits (int, optional): The number of splits for cross-validation. Defaults to 5.
             estimate_runtime (bool, optional): Whether to estimate the model's total training time from its first fold. Defaults to False.
             dataset_count (int, optional): Number of datasets included in the model execution. Defaults to 1.
-            fold_workers (int, optional): Maximum number of folds to run in parallel. Defaults to 1.
+            fold_workers (int, optional): Maximum number of validation folds to run
+                in parallel across all hyperparameter candidates. Defaults to 1.
 
         Returns:
             results (dict): Evaluation results, including best hyperparameters, validation results, and test results. 
@@ -79,13 +80,12 @@ class IModelEvaluator:
         candidates = self._load_hyperparameter_candidates() if hyperparameter_search else [{}]
         
         fold_indexes = list(range(n_splits)) if cross_validation else [0]
-        effective_fold_workers = min(fold_workers, len(fold_indexes))
+        validation_runs = len(candidates) * len(fold_indexes)
+        effective_fold_workers = min(fold_workers, validation_runs)
         total_training_runs = dataset_count * (
-            len(candidates) * len(fold_indexes) + 1
+            validation_runs + 1
         )
         
-        candidate_results = []
-        validation_runs = len(candidates) * len(fold_indexes)
         validation_metric = base_config["valid_metric"]
 
         LOGGER.info(
@@ -99,69 +99,36 @@ class IModelEvaluator:
         )
 
         LOGGER.info("Fold workers: %d\n", effective_fold_workers)
-        
-        # 2. If there are candidates for hyperparameter search, runs the loop
-        executor = None
 
-        if effective_fold_workers > 1:
-            executor = ProcessPoolExecutor(
-                max_workers=effective_fold_workers,
-                mp_context=multiprocessing.get_context("spawn"),
-                initializer=self._configure_project_logging,
+        def log_runtime_estimate(first_fold_elapsed):
+            if not estimate_runtime:
+                return
+
+            parallel_validation_runs = (
+                dataset_count * validation_runs / effective_fold_workers
+            )
+            estimated_runs = parallel_validation_runs + dataset_count
+            elapsed_hours = first_fold_elapsed * estimated_runs / 3600
+
+            LOGGER.info(
+                "\n --> Estimativa de duração do %s: %.2f horas "
+                "(%d treinos | %d workers)\n",
+                self.MODEL_NAME,
+                elapsed_hours,
+                total_training_runs,
+                effective_fold_workers,
             )
 
-        try:
-            for candidate_index, hyperparameters in enumerate(candidates, start=1):
-                LOGGER.info(
-                    "Candidate %d/%d | %s",
-                    candidate_index,
-                    len(candidates),
-                    self._format_hyperparameters(hyperparameters),
-                )
-
-                fold_results, first_fold_elapsed = self._evaluate_folds(
-                    splitter=splitter,
-                    fold_indexes=fold_indexes,
-                    hyperparameters=hyperparameters,
-                    base_seed=base_config["seed"],
-                    executor=executor,
-                )
-
-                if estimate_runtime and candidate_index == 1:
-                    parallel_validation_runs = (
-                        dataset_count * len(candidates) * len(fold_indexes)
-                        / effective_fold_workers
-                    )
-                    estimated_runs = parallel_validation_runs + dataset_count
-                    elapsed_hours = first_fold_elapsed * estimated_runs / 3600
-
-                    LOGGER.info(
-                        "\n --> Estimativa de duração do %s: %.2f horas "
-                        "(%d treinos | %d workers)\n",
-                        self.MODEL_NAME,
-                        elapsed_hours,
-                        total_training_runs,
-                        effective_fold_workers,
-                    )
-
-                aggregate = self._aggregate_fold_results(fold_results)
-
-                candidate_result = {
-                    "hyperparameters": hyperparameters,
-                    "fold_results": fold_results,
-                    **aggregate,
-                }
-                candidate_results.append(candidate_result)
-
-                LOGGER.info(
-                    "  %s: %.4f ± %.4f\n",
-                    validation_metric,
-                    aggregate["mean_score"],
-                    aggregate["std_score"],
-                )
-        finally:
-            if executor is not None:
-                executor.shutdown(cancel_futures=True)
+        # 2. Keep one continuous queue of folds across all candidates.
+        candidate_results, _ = self._evaluate_candidates(
+            splitter=splitter,
+            fold_indexes=fold_indexes,
+            candidates=candidates,
+            base_seed=base_config["seed"],
+            fold_workers=effective_fold_workers,
+            validation_metric=validation_metric,
+            first_candidate_callback=log_runtime_estimate,
+        )
 
         best_candidate = self._select_best_candidate(
             candidate_results,
@@ -199,80 +166,127 @@ class IModelEvaluator:
         
         return results
 
-    def _evaluate_folds(self, splitter, fold_indexes, hyperparameters, base_seed, executor):
-        """
-        Evaluates every fold sequentially or using the provided process pool.
-
-        Args:
-            splitter: The cross-validation splitter.
-            fold_indexes (list[int]): Fold indexes to evaluate.
-            hyperparameters (dict[str, Any]): Hyperparameters to override the default configuration.
-            base_seed (int): Base seed used to initialize each fold.
-            executor (ProcessPoolExecutor, optional): Process pool used to run folds in parallel.
-
-        Returns:
-            fold_results: Results ordered by fold index.
-            first_fold_elapsed: Elapsed time for the first fold.
-        """
-        fold_results = []
+    def _evaluate_candidates(
+        self,
+        splitter,
+        fold_indexes,
+        candidates,
+        base_seed,
+        fold_workers,
+        validation_metric,
+        first_candidate_callback=None,
+    ):
+        """Evaluate one continuous queue of folds across all candidates."""
+        fold_results_by_candidate = [[] for _ in candidates]
         first_fold = fold_indexes[0]
+        first_fold_elapsed = None
         start_time = time.perf_counter()
 
         progress = tqdm(
-            fold_indexes,
-            desc="  folds",
+            total=len(candidates) * len(fold_indexes),
+            desc="  validation",
             unit="fold",
             dynamic_ncols=True,
         )
 
-        if executor is None:
-            try:
-                for fold in progress:
-                    result = self._evaluate_fold(
-                        fold=fold,
-                        benchmark_filename=splitter.fold_benchmark(fold),
-                        hyperparameters=hyperparameters,
-                        run_seed=base_seed + fold,
-                    )
-                    fold_results.append(result)
-                    progress.set_postfix(score=f"{result['score']:.4f}")
+        executor = None
+        futures = {}
 
-                    if fold == first_fold:
-                        first_fold_elapsed = time.perf_counter() - start_time
-            except BaseException:
-                progress.close()
-                raise
-        else:
-            futures = {
-                executor.submit(
-                    self._evaluate_fold,
-                    fold,
-                    splitter.fold_benchmark(fold),
-                    hyperparameters,
-                    base_seed + fold,
-                ): fold
-                for fold in fold_indexes
-            }
+        try:
+            if fold_workers == 1:
+                for candidate_index, hyperparameters in enumerate(candidates):
+                    for fold in fold_indexes:
+                        result = self._evaluate_fold(
+                            fold=fold,
+                            benchmark_filename=splitter.fold_benchmark(fold),
+                            hyperparameters=hyperparameters,
+                            run_seed=base_seed + fold,
+                        )
+                        fold_results_by_candidate[candidate_index].append(result)
+                        progress.update()
+                        progress.set_postfix(score=f"{result['score']:.4f}")
 
-            try:
+                        if candidate_index == 0 and fold == first_fold:
+                            first_fold_elapsed = time.perf_counter() - start_time
+
+                        if (
+                            candidate_index == 0
+                            and len(fold_results_by_candidate[0]) == len(fold_indexes)
+                            and first_candidate_callback is not None
+                        ):
+                            first_candidate_callback(first_fold_elapsed)
+            else:
+                executor = ProcessPoolExecutor(
+                    max_workers=fold_workers,
+                    mp_context=multiprocessing.get_context("spawn"),
+                    initializer=self._configure_project_logging,
+                )
+
+                for candidate_index, hyperparameters in enumerate(candidates):
+                    for fold in fold_indexes:
+                        future = executor.submit(
+                            self._evaluate_fold,
+                            fold,
+                            splitter.fold_benchmark(fold),
+                            hyperparameters,
+                            base_seed + fold,
+                        )
+                        futures[future] = candidate_index
+
                 for future in as_completed(futures):
+                    candidate_index = futures[future]
                     result = future.result()
-                    fold_results.append(result)
+                    fold_results_by_candidate[candidate_index].append(result)
                     progress.update()
                     progress.set_postfix(score=f"{result['score']:.4f}")
 
-                    if result["fold"] == first_fold:
+                    if candidate_index == 0 and result["fold"] == first_fold:
                         first_fold_elapsed = time.perf_counter() - start_time
-            except BaseException:
-                for future in futures:
-                    future.cancel()
-                progress.close()
-                raise
 
-        progress.close()
-        fold_results.sort(key=lambda result: result["fold"])
+                    if (
+                        candidate_index == 0
+                        and len(fold_results_by_candidate[0]) == len(fold_indexes)
+                        and first_candidate_callback is not None
+                    ):
+                        first_candidate_callback(first_fold_elapsed)
+        except BaseException:
+            for future in futures:
+                future.cancel()
+            raise
+        finally:
+            progress.close()
 
-        return fold_results, first_fold_elapsed
+            if executor is not None:
+                executor.shutdown(cancel_futures=True)
+
+        candidate_results = []
+
+        for candidate_index, (hyperparameters, fold_results) in enumerate(
+            zip(candidates, fold_results_by_candidate),
+            start=1,
+        ):
+            fold_results.sort(key=lambda result: result["fold"])
+            aggregate = self._aggregate_fold_results(fold_results)
+            candidate_results.append({
+                "hyperparameters": hyperparameters,
+                "fold_results": fold_results,
+                **aggregate,
+            })
+
+            LOGGER.info(
+                "Candidate %d/%d | %s",
+                candidate_index,
+                len(candidates),
+                self._format_hyperparameters(hyperparameters),
+            )
+            LOGGER.info(
+                "  %s: %.4f ± %.4f\n",
+                validation_metric,
+                aggregate["mean_score"],
+                aggregate["std_score"],
+            )
+
+        return candidate_results, first_fold_elapsed
 
     def _evaluate_fold(self, fold, benchmark_filename, hyperparameters, run_seed):
         """
