@@ -24,3 +24,4 @@ saved/
 
 results/**/data/
 results/**/models/
+.idea

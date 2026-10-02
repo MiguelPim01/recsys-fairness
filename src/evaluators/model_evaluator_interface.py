@@ -17,7 +17,11 @@ from recbole.data import create_dataset, data_preparation
 from recbole.utils import get_model, get_trainer, init_seed
 from tqdm.auto import tqdm
 
-from src.utils.experiments import register_model
+from src.utils.experiments import (
+    discard_orphan_checkpoint,
+    is_model_trained,
+    register_model,
+)
 
 LOGGER = logging.getLogger("recsys_fairness.evaluation")
 
@@ -55,6 +59,16 @@ class IModelEvaluator:
             results (dict): Evaluation results, including best hyperparameters, validation results, and test results. 
         """
         self._configure_project_logging()
+
+        # Idempotent resume
+        if is_model_trained(self.experiment_dir, self.dataset_dir.name, self.MODEL_NAME.casefold()):
+            LOGGER.info(
+                "%s on %s already trained; skipping (checkpoint registered).",
+                self.MODEL_NAME,
+                self.dataset_dir.name,
+            )
+            return None
+
         self._ensure_checkpoint_available()
 
         if fold_workers < 1:
@@ -564,11 +578,20 @@ class IModelEvaluator:
         trainer.saved_model_file = str(self.checkpoint_path)
 
     def _ensure_checkpoint_available(self):
+        """Clear an orphan checkpoint left by an interrupted run.
+
+        ``evaluate`` only reaches this point when the model is NOT registered in
+        the manifest. Any ``.pth`` sitting here is therefore an orphan from a
+        job that died after RecBole saved the file but before it was registered.
+        It is safe to discard and retrain, which is what makes a resubmitted job
+        resume cleanly instead of raising FileExistsError.
+        """
         if self.checkpoint_path.exists():
-            raise FileExistsError(
-                f"Model checkpoint already exists and will not be overwritten: "
-                f"{self.checkpoint_path}"
+            LOGGER.info(
+                "Discarding orphan checkpoint from an interrupted run: %s",
+                self.checkpoint_path,
             )
+            discard_orphan_checkpoint(self.checkpoint_path)
 
     def _register_final_checkpoint(self, trainer):
         register_model(
