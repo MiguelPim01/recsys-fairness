@@ -2,7 +2,9 @@ import csv
 import hashlib
 import json
 import math
+import os
 import random
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -201,7 +203,8 @@ class ICrossValidationSplitter:
         
         try:
             with self.manifest_path.open(encoding="utf-8") as input_file:
-                return json.load(input_file)
+                manifest = json.load(input_file)
+                return manifest if isinstance(manifest, dict) else None
         except (json.JSONDecodeError, OSError):
             return None
 
@@ -219,17 +222,50 @@ class ICrossValidationSplitter:
         if preprocessing is not None:
             manifest["preprocessing"] = preprocessing
         
-        with self.manifest_path.open("w", encoding="utf-8") as output_file:
-            json.dump(manifest, output_file, indent=2)
-            output_file.write("\n")
+        temporary_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=self.dataset_dir,
+                prefix=f".{self.manifest_path.name}.", suffix=".tmp", delete=False,
+            ) as output_file:
+                temporary_path = Path(output_file.name)
+                json.dump(manifest, output_file, indent=2)
+                output_file.write("\n")
+                output_file.flush()
+                os.fsync(output_file.fileno())
+            os.replace(temporary_path, self.manifest_path)
+            self._sync_directory(self.dataset_dir)
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
 
     @staticmethod
     def _write_atomic_file(path, header, rows):
-        with path.open("w", encoding="utf-8", newline="") as output_file:
-            writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
-            
-            writer.writerow(header)
-            writer.writerows(rows)
+        temporary_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", newline="", dir=path.parent,
+                prefix=f".{path.name}.", suffix=".tmp", delete=False,
+            ) as output_file:
+                temporary_path = Path(output_file.name)
+                writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
+                writer.writerow(header)
+                writer.writerows(rows)
+                output_file.flush()
+                os.fsync(output_file.fileno())
+            os.replace(temporary_path, path)
+            ICrossValidationSplitter._sync_directory(path.parent)
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+
+    @staticmethod
+    def _sync_directory(path):
+        directory_fd = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
 
     @staticmethod
     def _sha256(path):

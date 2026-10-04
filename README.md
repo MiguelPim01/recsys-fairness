@@ -47,6 +47,7 @@ data/sample/<users>_<items>/seed_<K>/<dataset>/
 
 results/<users>_<items>/seed_<K>/<dataset>/
 ├── models/{neumf,multivae}.pth
+├── models/checkpoints/fold_<F>/config_<C>/{neumf,multivae}.{pth,json}
 ├── results.json
 ├── k_clusters_fairness.json
 └── sample_statistics/
@@ -58,6 +59,15 @@ reuses validated samples, splits, and model checkpoints. Complete transformed
 files are also reused; for Yelp, the recorded transformation mode must match
 `USE_RESTAURANTS_USERS_ONLY`. `make clean` preserves versioned samples and
 removes only transformed data.
+
+During cross-validation, each completed fold keeps its best model and validation
+metrics in `models/checkpoints/fold_<F>/config_<C>/`. `config_<C>` is the
+zero-based position in that model's hyperparameter list; the JSON records the
+actual values and the checkpoint checksum. Interrupted runs reuse valid folds,
+retrain only missing or damaged folds, and recover a completed final training
+run when possible. Changed datasets or model configurations in the same
+experiment directory cause an error; delete that experiment's results directory
+manually to start over with the same user/item limits and seed.
 
 You can also run each script separately.
 
@@ -106,7 +116,7 @@ negative items (`uni100`). Hyperparameter selection therefore uses sampled
 Recall, NDCG, and MRR. The final test and group-fairness analysis use full-sort
 evaluation over the complete item catalog.
 
-Training only writes the final checkpoints. Fairness analysis is a separate step
+Training writes fold checkpoints and the final model. Fairness analysis is a separate step
 that can be rerun without training:
 
 ```bash

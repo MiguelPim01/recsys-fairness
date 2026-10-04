@@ -62,18 +62,7 @@ def create_experiment(user_limit: int, item_limit: int, seed: int) -> Path:
         raise FileExistsError(
             f"Experiment already exists and will not be overwritten: {path}"
         ) from None
-    _atomic_json_write(
-        path / "experiment.json",
-        {
-            "experiment": path.name,
-            "seed": seed,
-            "user_limit": user_limit,
-            "item_limit": item_limit,
-            "status": "created",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "datasets": {},
-        },
-    )
+    _atomic_json_write(path / "experiment.json", _new_manifest(path, user_limit, item_limit, seed))
 
     return path
 
@@ -83,9 +72,51 @@ def create_or_resume_experiment(user_limit: int, item_limit: int, seed: int) -> 
         raise ValueError("Seed must be a non-negative integer")
 
     path = experiment_root(user_limit, item_limit) / f"seed_{seed}"
-    if path.is_dir() and (path / "experiment.json").is_file():
+    if path.is_dir():
+        manifest_path = path / "experiment.json"
+        if manifest_path.is_file():
+            manifest = _read_json(manifest_path)
+            if (
+                not isinstance(manifest, dict)
+                or manifest.get("seed") != seed
+                or manifest.get("user_limit") != user_limit
+                or manifest.get("item_limit") != item_limit
+            ):
+                raise ValueError(f"Experiment identity mismatch: {manifest_path}")
+            return path
+        lock_path = path / ".experiment.json.lock"
+        with lock_path.open("a+") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            if manifest_path.is_file():
+                return path
+            if any(
+                entry.name != lock_path.name and not (
+                    entry.name.startswith(".experiment.json.")
+                    and entry.name.endswith(".tmp")
+                )
+                for entry in path.iterdir()
+            ):
+                raise ValueError(
+                    f"Experiment has files but no manifest: {path}. "
+                    "Inspect it before resuming."
+                )
+            _atomic_json_write(
+                manifest_path, _new_manifest(path, user_limit, item_limit, seed)
+            )
         return path
     return create_experiment(user_limit, item_limit, seed)
+
+
+def _new_manifest(path: Path, user_limit: int, item_limit: int, seed: int) -> dict:
+    return {
+        "experiment": path.name,
+        "seed": seed,
+        "user_limit": user_limit,
+        "item_limit": item_limit,
+        "status": "created",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "datasets": {},
+    }
 
 
 def experiment_status(experiment_dir: Path) -> str:
@@ -95,14 +126,38 @@ def experiment_status(experiment_dir: Path) -> str:
 
 
 def is_experiment_complete(user_limit: int, item_limit: int, seed: int) -> bool:
-    """Return True when the seed exists and is marked ``complete``."""
+    """Return True only when the completed campaign's artifacts still verify."""
     path = experiment_root(user_limit, item_limit) / f"seed_{seed}"
     manifest_path = path / "experiment.json"
     if not manifest_path.is_file():
         return False
     try:
-        return _read_json(manifest_path).get("status") == "complete"
-    except (OSError, json.JSONDecodeError):
+        manifest = _read_json(manifest_path)
+        if not isinstance(manifest, dict) or manifest.get("status") != "complete":
+            return False
+        for dataset in SPLITTERS:
+            for model in ("neumf", "multivae"):
+                validate_model_checkpoint(path, dataset, model)
+            dataset_dir = path / dataset
+            fairness = _read_json(dataset_dir / "results.json")
+            if (
+                not isinstance(fairness, dict)
+                or not isinstance(fairness.get("results"), dict)
+                or not {"NeuMF", "MultiVAE"}.issubset(fairness["results"])
+            ):
+                return False
+            _read_json(dataset_dir / "k_clusters_fairness.json")
+            for artifact in (
+                "boxplot.pdf",
+                "grp_unfairness_by_model_and_groups.pdf",
+                "grp_loss_by_model_and_groups.pdf",
+                "grp_unfairness_and_error_table.json",
+            ):
+                output_path = dataset_dir / artifact
+                if not output_path.is_file() or output_path.stat().st_size == 0:
+                    return False
+        return True
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
         return False
 
 
@@ -149,40 +204,72 @@ def prepare_dataset(experiment_dir: Path, dataset: str, folds: int) -> Path:
         n_splits=folds,
         seed=experiment_seed(experiment_dir),
     )
+    dataset_entry = manifest.get("datasets", {}).get(dataset)
+    if isinstance(dataset_entry, dict) and dataset_entry.get("sha256"):
+        split_manifest = splitter._read_manifest()
+        if split_manifest is not None and (
+            split_manifest.get("n_splits") != folds
+            or split_manifest.get("seed") != splitter.seed
+            or split_manifest.get("test_ratio") != splitter.test_ratio
+            or split_manifest.get("source_sha256") != splitter._sha256(splitter.interaction_path)
+        ):
+            raise ValueError(
+                f"Split configuration changed for {dataset} in {experiment_dir}. "
+                "Remove the experiment results manually before starting a new run."
+            )
     split_statistics = splitter.prepare()
 
     sample_path = str(source_dir.relative_to(REPOSITORY_ROOT))
     sample_hash = _directory_sha256(source_dir)
-    dataset_entry = manifest.get("datasets", {}).get(dataset)
     if (
-        split_statistics.get("reused") is True
-        and isinstance(dataset_entry, dict)
+        isinstance(dataset_entry, dict)
         and dataset_entry.get("sample") == sample_path
         and dataset_entry.get("sha256") == sample_hash
     ):
         return source_dir
 
-    manifest["status"] = "prepared"
-    manifest.setdefault("datasets", {})[dataset] = {
-        "sample": sample_path,
-        "sha256": sample_hash,
-        "split_statistics": {
-            key: value
-            for key, value in split_statistics.items()
-            if key != "reused"
-        },
-    }
-    _atomic_json_write(manifest_path, manifest)
+    if isinstance(dataset_entry, dict) and dataset_entry.get("sha256"):
+        raise ValueError(
+            f"Sample or splits changed for {dataset} in {experiment_dir}. "
+            "Remove the experiment results manually before starting a new run."
+        )
+
+    lock_path = experiment_dir / ".experiment.json.lock"
+    with lock_path.open("a+") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        manifest = _read_json(manifest_path)
+        dataset_entry = manifest.get("datasets", {}).get(dataset)
+        if isinstance(dataset_entry, dict) and dataset_entry.get("sha256"):
+            if (
+                dataset_entry.get("sample") == sample_path
+                and dataset_entry.get("sha256") == sample_hash
+            ):
+                return source_dir
+            raise ValueError(f"Sample or splits changed for {dataset} in {experiment_dir}")
+        manifest["status"] = "prepared"
+        manifest.setdefault("datasets", {})[dataset] = {
+            "sample": sample_path,
+            "sha256": sample_hash,
+            "split_statistics": {
+                key: value
+                for key, value in split_statistics.items()
+                if key != "reused"
+            },
+        }
+        _atomic_json_write(manifest_path, manifest)
     return source_dir
 
 
 def set_experiment_status(experiment_dir: Path, status: str) -> None:
     manifest_path = experiment_dir / "experiment.json"
-    manifest = _read_json(manifest_path)
-    manifest["status"] = status
-    if status == "complete":
-        manifest["completed_at"] = datetime.now(timezone.utc).isoformat()
-    _atomic_json_write(manifest_path, manifest)
+    lock_path = experiment_dir / ".experiment.json.lock"
+    with lock_path.open("a+") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        manifest = _read_json(manifest_path)
+        manifest["status"] = status
+        if status == "complete":
+            manifest["completed_at"] = datetime.now(timezone.utc).isoformat()
+        _atomic_json_write(manifest_path, manifest)
 
 
 def register_model(
@@ -262,7 +349,9 @@ def validate_model_checkpoint(
 def _directory_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     files = sorted(
-        candidate for candidate in path.rglob("*") if candidate.is_file()
+        candidate for candidate in path.rglob("*")
+        if candidate.is_file()
+        and not (candidate.name.startswith(".") and candidate.name.endswith(".tmp"))
     )
     for file_path in files:
         digest.update(str(file_path.relative_to(path)).encode("utf-8"))
@@ -298,11 +387,16 @@ def _atomic_json_write(path: Path, value) -> None:
             delete=False,
         ) as output_file:
             temporary_path = Path(output_file.name)
-            json.dump(value, output_file, indent=2, sort_keys=True)
+            json.dump(value, output_file, indent=2, sort_keys=True, allow_nan=False)
             output_file.write("\n")
             output_file.flush()
             os.fsync(output_file.fileno())
         os.replace(temporary_path, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     except Exception:
         if temporary_path is not None and temporary_path.exists():
             temporary_path.unlink()
