@@ -151,10 +151,21 @@ def prepare_dataset(experiment_dir: Path, dataset: str, folds: int) -> Path:
     )
     split_statistics = splitter.prepare()
 
+    sample_path = str(source_dir.relative_to(REPOSITORY_ROOT))
+    sample_hash = _directory_sha256(source_dir)
+    dataset_entry = manifest.get("datasets", {}).get(dataset)
+    if (
+        split_statistics.get("reused") is True
+        and isinstance(dataset_entry, dict)
+        and dataset_entry.get("sample") == sample_path
+        and dataset_entry.get("sha256") == sample_hash
+    ):
+        return source_dir
+
     manifest["status"] = "prepared"
     manifest.setdefault("datasets", {})[dataset] = {
-        "sample": str(source_dir.relative_to(REPOSITORY_ROOT)),
-        "sha256": _directory_sha256(source_dir),
+        "sample": sample_path,
+        "sha256": sample_hash,
         "split_statistics": {
             key: value
             for key, value in split_statistics.items()

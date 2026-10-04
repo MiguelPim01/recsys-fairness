@@ -52,11 +52,12 @@ results/<users>_<items>/seed_<K>/<dataset>/
 └── sample_statistics/
 ```
 
-Running the same limits and seed again fails without overwriting the existing
-result. A complete, validated sample is reused without being regenerated.
-Complete transformed files are also reused; for Yelp, the recorded transformation
-mode must match `USE_RESTAURANTS_USERS_ONLY`. `make clean` preserves versioned
-samples and removes only transformed data.
+Running the same limits and seed again resumes the experiment. A complete
+experiment is skipped without changing its results; an incomplete experiment
+reuses validated samples, splits, and model checkpoints. Complete transformed
+files are also reused; for Yelp, the recorded transformation mode must match
+`USE_RESTAURANTS_USERS_ONLY`. `make clean` preserves versioned samples and
+removes only transformed data.
 
 You can also run each script separately.
 
