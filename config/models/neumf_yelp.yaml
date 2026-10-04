@@ -17,8 +17,8 @@ load_col:
 epochs: 50
 eval_step: 1
 stopping_step: 5
-train_batch_size: 64
-eval_batch_size: 64
+train_batch_size: 4096
+eval_batch_size: 4096
 learning_rate: 0.001
 train_neg_sample_args: ~
 
