@@ -101,6 +101,7 @@ class ICrossValidationSplitter:
         development_rows = []
         test_rows = []
         validation_fold_by_row = []
+        next_fold = 0
         
         random_generator = random.Random(self.seed)
 
@@ -123,7 +124,9 @@ class ICrossValidationSplitter:
             development_rows.extend(user_development_rows)
             
             for index, row in enumerate(user_development_rows):
-                validation_fold_by_row.append((row, index % self.n_splits))
+                validation_fold_by_row.append((row, (next_fold + index) % self.n_splits))
+
+            next_fold = (next_fold + len(user_development_rows)) % self.n_splits
 
         return development_rows, test_rows, validation_fold_by_row
 

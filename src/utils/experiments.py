@@ -188,6 +188,23 @@ def experiment_seed(experiment_dir: Path) -> int:
     return seed
 
 
+def ensure_recorded_split_reusable(experiment_dir: Path, dataset: str, splitter) -> None:
+    """Protect an experiment's recorded split files from regeneration."""
+    manifest = _read_json(experiment_dir / "experiment.json")
+    dataset_entry = manifest.get("datasets", {}).get(dataset)
+    if not isinstance(dataset_entry, dict) or not dataset_entry.get("sha256"):
+        return
+
+    split_manifest = splitter._read_manifest()
+    source_hash = splitter._sha256(splitter.interaction_path)
+    if not splitter._can_reuse(split_manifest, source_hash, splitter._expected_files()):
+        raise ValueError(
+            f"Split configuration or files changed for {dataset} in {experiment_dir}. "
+            "Start a new experiment with a different seed or limits to use "
+            "the current split method."
+        )
+
+
 def prepare_dataset(experiment_dir: Path, dataset: str, folds: int) -> Path:
     manifest_path = experiment_dir / "experiment.json"
     manifest = _read_json(manifest_path)
@@ -205,18 +222,7 @@ def prepare_dataset(experiment_dir: Path, dataset: str, folds: int) -> Path:
         seed=experiment_seed(experiment_dir),
     )
     dataset_entry = manifest.get("datasets", {}).get(dataset)
-    if isinstance(dataset_entry, dict) and dataset_entry.get("sha256"):
-        split_manifest = splitter._read_manifest()
-        if split_manifest is not None and (
-            split_manifest.get("n_splits") != folds
-            or split_manifest.get("seed") != splitter.seed
-            or split_manifest.get("test_ratio") != splitter.test_ratio
-            or split_manifest.get("source_sha256") != splitter._sha256(splitter.interaction_path)
-        ):
-            raise ValueError(
-                f"Split configuration changed for {dataset} in {experiment_dir}. "
-                "Remove the experiment results manually before starting a new run."
-            )
+    ensure_recorded_split_reusable(experiment_dir, dataset, splitter)
     split_statistics = splitter.prepare()
 
     sample_path = str(source_dir.relative_to(REPOSITORY_ROOT))

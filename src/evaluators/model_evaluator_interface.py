@@ -30,6 +30,7 @@ from src.utils.experiments import (
     _atomic_json_write,
     _file_sha256,
     discard_orphan_checkpoint,
+    ensure_recorded_split_reusable,
     is_model_trained,
     register_model,
 )
@@ -136,6 +137,9 @@ class IModelEvaluator:
             dataset_dir=self.dataset_dir,
             n_splits=n_splits,
             seed=base_config["seed"],
+        )
+        ensure_recorded_split_reusable(
+            self.experiment_dir, self.dataset_dir.name, splitter
         )
         split_statistics = splitter.prepare()
 

@@ -11,3 +11,4 @@ class YelpCrossValidationSplitter(ICrossValidationSplitter):
 
     DATASET_NAME = DATASET_NAME
     MANIFEST_FILENAME = MANIFEST_FILENAME
+    MANIFEST_VERSION = 2

@@ -69,6 +69,12 @@ run when possible. Changed datasets or model configurations in the same
 experiment directory cause an error; delete that experiment's results directory
 manually to start over with the same user/item limits and seed.
 
+Validation folds are assigned across users in a continuous rotation. Their total
+interaction counts differ by at most one, while each user's development
+interactions remain distributed as evenly as possible. Existing experiments
+retain their recorded split version; use a new seed or limits for the updated
+assignment without replacing their results.
+
 You can also run each script separately.
 
 ### Run separately
