@@ -25,6 +25,16 @@ uv sync
 
 ### Run experiments
 
+Transform the raw datasets once before starting experiments:
+```bash
+make run_etl
+```
+For users with a strong preference for restaurants, run
+`make run_etl USE_RESTAURANTS_USERS_ONLY=true` and use the same flag when
+running experiments. Run the transformation again only when changing this
+option or rebuilding the processed data. A run interrupted before its
+transformation manifest is written can be safely repeated.
+
 You can run all the experiments with the command:
 ```bash
 make run_experiments USER_LIMIT=<N> ITEM_LIMIT=<M> SEED=<K> USE_RESTAURANTS_USERS_ONLY=<flag>
@@ -34,7 +44,7 @@ Possible flag values:
 - `USER_LIMIT`: Quantity of users to be used for experimenting. Defaults to 1000.
 - `ITEM_LIMIT`: Quantity of items to be used for experimenting. Defaults to 1000.
 - `SEED`: Random seed used by sampling, splits, training, and fairness analysis. Defaults to 42.
-- `USE_RESTAURANTS_USERS_ONLY`: Wether to use only users that have a strong preference for restaurants. Defaults to false.
+- `USE_RESTAURANTS_USERS_ONLY`: Whether to use only users that have a strong preference for restaurants. Defaults to false. This must match the earlier transformation.
 
 This creates an experiment identified by its seed and runs the pipeline for all
 models and datasets. Samples are kept separately from result artifacts:
@@ -55,10 +65,11 @@ results/<users>_<items>/seed_<K>/<dataset>/
 
 Running the same limits and seed again resumes the experiment. A complete
 experiment is skipped without changing its results; an incomplete experiment
-reuses validated samples, splits, and model checkpoints. Complete transformed
-files are also reused; for Yelp, the recorded transformation mode must match
+reuses validated samples, splits, and model checkpoints. Experiments do not
+run the ETL: pending seeds require processed LastFM and Yelp files with
+completed transformation manifests, and the Yelp mode must match
 `USE_RESTAURANTS_USERS_ONLY`. `make clean` preserves versioned samples and
-removes only transformed data.
+removes only transformed data; run the transformation again after cleaning.
 
 During cross-validation, each completed fold keeps its best model and validation
 metrics in `models/checkpoints/fold_<F>/config_<C>/`. `config_<C>` is the

@@ -15,7 +15,7 @@ Você vai precisar de três coisas no NFS (que é compartilhado entre as
 máquinas):
 
 1. **O código** em `/mnt/cluster-nfs/datasets/$USER/recsys-fairness`
-2. **Os dados brutos** em `.../recsys-fairness/data/raw/{lastfm_360k,yelp}`
+2. **Os dados processados** em `.../recsys-fairness/data/processed/{lastfm,yelp}`, copiados após o ETL local
 3. **As libs do projeto** pré-instaladas (recbole etc.) — a gente faz isso no
    passo 2.
 
@@ -24,15 +24,27 @@ na home de um nó (que não é compartilhada).
 
 ## 1. Subir código e dados (da sua máquina)
 
-```bash
-rsync -av --exclude .git --exclude .venv --exclude results \
-  ~/Documents/Tese/recsys-fairness/ \
-  $USER@172.20.72.19:/mnt/cluster-nfs/datasets/$USER/recsys-fairness/
+Na raiz do projeto local, execute o ETL uma vez e espere terminar:
 
-# os dados brutos (são grandes, vai demorar):
-rsync -av ~/caminho/dos/dados/raw/ \
-  $USER@172.20.72.19:/mnt/cluster-nfs/datasets/$USER/recsys-fairness/data/raw/
+```bash
+./scripts/transform_datasets.sh all
 ```
+
+Acrescente `--use-restaurants-users-only` se quiser apenas usuários do Yelp
+com preferência por restaurantes. A opção `--restaurants-only` ao
+submeter os experimentos deve corresponder à variante transformada.
+
+```bash
+LAB_USER=SEU_USUARIO
+LAB_PROJECT="/mnt/cluster-nfs/datasets/$LAB_USER/recsys-fairness"
+rsync -av --exclude .git --exclude .venv --exclude results \
+  --exclude data/raw --exclude data/sample \
+  ./ "$LAB_USER@172.20.72.19:$LAB_PROJECT/"
+```
+
+Isso copia `data/processed/` e seus manifestos. Se você refizer o ETL,
+sincronize os dados processados novamente antes dos próximos experimentos.
+Não copie uma nova variante enquanto houver workers usando a anterior.
 
 ## 2. Instalar as libs no NFS (uma vez, no servidor)
 

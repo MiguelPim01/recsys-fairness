@@ -11,6 +11,7 @@ from src.utils.experiments import (
     resolve_experiment,
     set_experiment_status,
 )
+from src.utils.transforms import can_reuse_transformation
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPOSITORY_ROOT / "scripts"
@@ -71,6 +72,27 @@ def _run(command: list[str]) -> None:
     subprocess.run(command, cwd=str(REPOSITORY_ROOT), check=True)
 
 
+def _require_transformed_datasets(use_restaurants_users_only: bool) -> None:
+    """Fail before sampling if the manually prepared datasets are unavailable."""
+    variants = {
+        "lastfm": {"format": "default"},
+        "yelp": {"use_restaurants_users_only": use_restaurants_users_only},
+    }
+    for dataset, variant in variants.items():
+        output_dir = REPOSITORY_ROOT / "data" / "processed" / dataset
+        if not can_reuse_transformation(output_dir, dataset, variant):
+            option = (
+                " --use-restaurants-users-only"
+                if use_restaurants_users_only else ""
+            )
+            raise RuntimeError(
+                f"Processed {dataset} data is missing, incomplete, or uses a "
+                f"different variant: {output_dir}. Run "
+                f"'./scripts/transform_datasets.sh all{option}' locally first; "
+                "for Slurm, copy data/processed/ to the project on the NFS."
+            )
+
+
 def run_seed(
     seed: int,
     user_limit: int,
@@ -84,6 +106,8 @@ def run_seed(
         print(f"[seed {seed}] already complete; skipping.", flush=True)
         return
 
+    _require_transformed_datasets(use_restaurants_users_only)
+
     experiment_dir = create_or_resume_experiment(user_limit, item_limit, seed)
     experiment = experiment_dir.name
     print(
@@ -93,19 +117,12 @@ def run_seed(
     )
 
     python = _python_command()
-    transform_sh = str(SCRIPTS_DIR / "transform_datasets.sh")
     sample_sh = str(SCRIPTS_DIR / "sample_datasets.sh")
     evaluate_sh = str(SCRIPTS_DIR / "evaluate_models.sh")
     fairness_sh = str(SCRIPTS_DIR / "analyze_fairness.sh")
 
     try:
-        # 1. Transform raw datasets into RecBole format (reused when present).
-        transform_command = [transform_sh, "all"]
-        if use_restaurants_users_only:
-            transform_command.append("--use-restaurants-users-only")
-        _run(transform_command)
-
-        # 2. Sample the datasets for this experiment (reused when valid).
+        # 1. Sample the previously transformed datasets (reused when valid).
         _run([
             sample_sh, "all",
             "--user-limit", str(user_limit),
@@ -113,7 +130,7 @@ def run_seed(
             "--experiment", experiment,
         ])
 
-        # 3. Prepare k-fold splits (reused when the split manifest matches).
+        # 2. Prepare k-fold splits (reused when the split manifest matches).
         _run([
             *python, "-m", "src.utils.experiments", "prepare",
             "--user-limit", str(user_limit),
@@ -123,7 +140,7 @@ def run_seed(
             "--folds", str(folds),
         ])
 
-        # 4. Train + evaluate every model (already-trained models are skipped).
+        # 3. Train + evaluate every model (already-trained models are skipped).
         _run([
             evaluate_sh,
             "--model", "all",
@@ -137,7 +154,7 @@ def run_seed(
             "--fold-workers", str(fold_workers),
         ])
 
-        # 5. Fairness analysis from the saved checkpoints (safe to rerun).
+        # 4. Fairness analysis from the saved checkpoints (safe to rerun).
         _run([
             fairness_sh,
             "--model", "all",

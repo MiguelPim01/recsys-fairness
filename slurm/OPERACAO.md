@@ -3,7 +3,7 @@
 Receituário do dia a dia: "quero fazer X → rode Y". Para o desenho geral
 (por que 1 nó = 1 worker, retomada, libs no NFS), veja `SLURM.md`.
 
-Tudo roda no **servidor**, por SSH:
+O ETL roda na sua máquina; os comandos Slurm abaixo rodam no **servidor**, por SSH:
 
 ```bash
 ssh SEU_USUARIO@172.20.72.19
@@ -12,7 +12,7 @@ cd /mnt/cluster-nfs/datasets/$USER/recsys-fairness
 
 Caminhos fixos (ajuste SEU_USUARIO/paths conforme o seu):
 - código: `/mnt/cluster-nfs/datasets/$USER/recsys-fairness`
-- dados brutos: `.../recsys-fairness/data/raw/{lastfm_360k,yelp}`
+- dados processados: `.../recsys-fairness/data/processed/{lastfm,yelp}`
 - libs no NFS: `/mnt/cluster-nfs/datasets/$USER/pylibs`
 - resultados: `.../recsys-fairness/results/<u>_<i>/seed_<k>/`
 - reservas: `slurm/reservations.txt`
@@ -35,15 +35,31 @@ Caminhos fixos (ajuste SEU_USUARIO/paths conforme o seu):
 
 ## 1. Preparação (uma vez)
 
-### 1.1 Subir código e dados para o NFS (da SUA máquina)
+### 1.1 Transformar os dados na sua máquina e subir o projeto ao NFS
+
+Na raiz do projeto local, antes de enviar qualquer experimento:
+
 ```bash
-rsync -av --exclude .git --exclude .venv --exclude results \
-  /home/hygo2025/Documents/Tese/recsys-fairness/ \
-  SEU_USUARIO@172.20.72.19:/mnt/cluster-nfs/datasets/$USER/recsys-fairness/
-# os dados brutos (grandes) também:
-rsync -av /caminho/local/data/raw/ \
-  SEU_USUARIO@172.20.72.19:/mnt/cluster-nfs/datasets/$USER/recsys-fairness/data/raw/
+./scripts/transform_datasets.sh all
 ```
+
+Acrescente `--use-restaurants-users-only` caso queira apenas usuários do Yelp
+com preferência por restaurantes. Repita o ETL apenas se mudar essa
+opção ou precisar reconstruir os dados processados. Espere o comando terminar
+com sucesso antes de copiar os arquivos. O valor de `--restaurants-only` no
+Slurm deve corresponder à opção usada aqui.
+
+```bash
+LAB_USER=SEU_USUARIO
+LAB_PROJECT="/mnt/cluster-nfs/datasets/$LAB_USER/recsys-fairness"
+rsync -av --exclude .git --exclude .venv --exclude results \
+  --exclude data/raw --exclude data/sample \
+  ./ "$LAB_USER@172.20.72.19:$LAB_PROJECT/"
+```
+
+Esse comando inclui `data/processed/` e seus manifestos. Depois do ETL,
+sincronize novamente essa pasta antes de submeter novas seeds no cluster.
+Não atualize os dados processados enquanto houver workers usando-os.
 
 ### 1.2 Pré-instalar as libs do projeto no NFS (NO SERVIDOR)
 ```bash
@@ -71,7 +87,7 @@ Deve imprimir `True`, o nome da GPU e a versão do recbole.
 ## 2. Receitas essenciais
 
 ### Quero rodar as seeds nas máquinas que reservei
-1. Edite `slurm/reservations.txt` (uma linha por janela):
+1. Confirme que `data/processed/` já foi copiado da máquina local e edite `slurm/reservations.txt` (uma linha por janela):
    ```
    DSLSERVER00    2026-10-02T00:00   2026-10-16T23:59
    DSLSERVER01    2026-10-02T00:00   2026-10-16T23:59

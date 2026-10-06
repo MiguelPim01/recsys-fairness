@@ -1,4 +1,4 @@
-.PHONY: run_experiments analyze_experiment clean
+.PHONY: run_etl run_experiments analyze_experiment clean
 
 USER_LIMIT ?= 1000
 ITEM_LIMIT ?= 1000
@@ -10,6 +10,9 @@ EXPERIMENT ?=
 PYTHON_COMMAND = $(if $(wildcard .venv/bin/python),.venv/bin/python,uv run python)
 
 YELP_TRANSFORM_ARGUMENTS = $(if $(filter true,$(USE_RESTAURANTS_USERS_ONLY)),--use-restaurants-users-only)
+
+run_etl:
+	@./scripts/transform_datasets.sh all $(YELP_TRANSFORM_ARGUMENTS)
 
 run_experiments:
 	@$(PYTHON_COMMAND) -m src.utils.campaign run \

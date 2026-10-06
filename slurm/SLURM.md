@@ -8,11 +8,13 @@ máquinas, partições), veja o material do boilerplate (`GUIA-SLURM.md`,
 
 ## A ideia em uma frase
 
-A campanha é um conjunto de **seeds**. Cada seed é uma execução completa do
-pipeline (`transform → sample → prepare → train/eval → fairness`). As seeds
+A campanha é um conjunto de **seeds**. O ETL é executado manualmente antes
+da campanha; cada seed executa apenas
+`sample → prepare → train/eval → fairness`. As seeds
 são distribuídas entre as máquinas reservadas, cada máquina roda uma fatia,
 e tudo é **retomável**: um job morto a qualquer momento é resubmetido e
-continua de onde parou, sem refazer o que já ficou pronto.
+continua de onde parou, sem refazer o que já ficou pronto. Cada worker
+confere os dados processados antes de iniciar uma seed pendente.
 
 ## Por que isto cumpre o "contrato" do template avançado
 
@@ -90,7 +92,8 @@ dependência.
 | O quê | Onde |
 |---|---|
 | Código | `/mnt/cluster-nfs/datasets/$USER/recsys-fairness` |
-| Dados brutos | `.../recsys-fairness/data/raw/{lastfm_360k,yelp}` |
+| Dados brutos | `data/raw/{lastfm_360k,yelp}` no computador local (não são necessários nos workers) |
+| Dados processados | `.../recsys-fairness/data/processed/{lastfm,yelp}` (copiados após ETL local) |
 | Libs no NFS | `/mnt/cluster-nfs/datasets/$USER/pylibs` |
 | Imagem | `/mnt/cluster-slurm/images/pytorch25-cuda128.sif` |
 | Resultados | `.../recsys-fairness/results/<u>_<i>/seed_<k>/` |
@@ -117,4 +120,6 @@ src/utils/campaign.py  orquestra as seeds por worker (run / pending / status)
 
 O `campaign.py` não reimplementa o pipeline: ele chama os mesmos
 `scripts/*.sh` do projeto, uma seed por vez, pulando o que já está pronto.
+Ele não transforma dados brutos; o ETL local e a cópia para o NFS são
+pré-requisitos para iniciar novas seeds.
 Assim há uma única fonte de verdade de como um experimento é produzido.
