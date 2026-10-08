@@ -128,6 +128,11 @@ Possible flags:
   parallel across hyperparameter candidates. Defaults to `1` and applies per
   model process; `--model all` can therefore run up to twice this number.
 
+With `--model all`, one model continues running if the other fails; the command
+returns a failure after both finish. Ctrl+C or SIGTERM stops both models and
+their fold workers. The campaign also stops processes from its active step when
+it is interrupted.
+
 Validation ranks each positive interaction against 100 uniformly sampled
 negative items (`uni100`). Hyperparameter selection therefore uses sampled
 Recall, NDCG, and MRR. The final test and group-fairness analysis use full-sort

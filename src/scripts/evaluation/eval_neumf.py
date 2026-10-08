@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 
 from src.evaluators.neumf_evaluator import NeuMFEvaluator
+from src.utils.processes import handle_sigterm
 from src.splitters.lastfm_cross_val import LastFMCrossValidationSplitter
 from src.splitters.yelp_cross_val import YelpCrossValidationSplitter
 from src.utils.experiments import (
@@ -87,6 +88,7 @@ def parse_arguments():
     return parser.parse_args()
 
 def main():
+    handle_sigterm()
     arguments = parse_arguments()
 
     hyperparameter_config_path = REPOSITORY_ROOT / "config/hyperparameters/neumf.yaml"

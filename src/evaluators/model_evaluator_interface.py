@@ -34,6 +34,7 @@ from src.utils.experiments import (
     is_model_trained,
     register_model,
 )
+from src.utils.processes import terminate_active_children
 
 LOGGER = logging.getLogger("recsys_fairness.evaluation")
 
@@ -287,6 +288,7 @@ class IModelEvaluator:
 
         executor = None
         futures = {}
+        failed = False
 
         try:
             if fold_workers == 1:
@@ -347,13 +349,17 @@ class IModelEvaluator:
                     ):
                         first_candidate_callback(first_fold_elapsed)
         except BaseException:
+            failed = True
             for future in futures:
                 future.cancel()
+            if executor is not None:
+                executor.shutdown(wait=False, cancel_futures=True)
+                terminate_active_children()
             raise
         finally:
             progress.close()
 
-            if executor is not None:
+            if executor is not None and not failed:
                 executor.shutdown(cancel_futures=True)
 
         candidate_results = []

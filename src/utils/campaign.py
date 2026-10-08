@@ -11,6 +11,7 @@ from src.utils.experiments import (
     resolve_experiment,
     set_experiment_status,
 )
+from src.utils.processes import handle_sigterm, terminate_process_group
 from src.utils.transforms import can_reuse_transformation
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -69,7 +70,22 @@ def _python_command() -> list[str]:
 def _run(command: list[str]) -> None:
     """Run a pipeline step, streaming output, aborting on failure."""
     print(f"\n$ {' '.join(command)}", flush=True)
-    subprocess.run(command, cwd=str(REPOSITORY_ROOT), check=True)
+    process = subprocess.Popen(
+        command, cwd=str(REPOSITORY_ROOT), start_new_session=True
+    )
+    try:
+        returncode = process.wait()
+    except BaseException:
+        terminate_process_group(process)
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
+        raise
+
+    if returncode != 0:
+        terminate_process_group(process)
+        raise subprocess.CalledProcessError(returncode, command)
 
 
 def _require_transformed_datasets(use_restaurants_users_only: bool) -> None:
@@ -265,6 +281,7 @@ def main() -> None:
     seeds = parse_seed_list(arguments.seeds)
 
     if arguments.command == "run":
+        handle_sigterm()
         run_campaign(
             seeds=seeds,
             worker_index=arguments.worker_index,
