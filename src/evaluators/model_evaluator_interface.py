@@ -1,3 +1,6 @@
+import fcntl
+import inspect
+import json
 import logging
 import multiprocessing
 import sys
@@ -5,6 +8,7 @@ import time
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import partial
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any, ClassVar
 from unittest.mock import patch
@@ -17,7 +21,20 @@ from recbole.data import create_dataset, data_preparation
 from recbole.utils import get_model, get_trainer, init_seed
 from tqdm.auto import tqdm
 
-from src.utils.experiments import register_model
+from src.utils.checkpoints import (
+    FoldCheckpointStore,
+    publish_checkpoint,
+    temporary_checkpoint,
+)
+from src.utils.experiments import (
+    _atomic_json_write,
+    _file_sha256,
+    discard_orphan_checkpoint,
+    ensure_recorded_split_reusable,
+    is_model_trained,
+    register_model,
+)
+from src.utils.processes import terminate_active_children
 
 LOGGER = logging.getLogger("recsys_fairness.evaluation")
 
@@ -39,6 +56,21 @@ class IModelEvaluator:
         self.seed = seed
 
     def evaluate(self, cross_validation=False, hyperparameter_search=False, n_splits=5, estimate_runtime=False, dataset_count=1, fold_workers=1):
+        """Run one model at a time for this experiment, including resumed runs."""
+        self.models_dir.mkdir(parents=True, exist_ok=True)
+        lock_path = self.models_dir / f".{self.MODEL_NAME.casefold()}.run.lock"
+        with lock_path.open("a+") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            return self._evaluate_unlocked(
+                cross_validation=cross_validation,
+                hyperparameter_search=hyperparameter_search,
+                n_splits=n_splits,
+                estimate_runtime=estimate_runtime,
+                dataset_count=dataset_count,
+                fold_workers=fold_workers,
+            )
+
+    def _evaluate_unlocked(self, cross_validation=False, hyperparameter_search=False, n_splits=5, estimate_runtime=False, dataset_count=1, fold_workers=1):
         """
         Evaluate the model.
 
@@ -55,7 +87,31 @@ class IModelEvaluator:
             results (dict): Evaluation results, including best hyperparameters, validation results, and test results. 
         """
         self._configure_project_logging()
-        self._ensure_checkpoint_available()
+
+        # Idempotent resume
+        if is_model_trained(self.experiment_dir, self.dataset_dir.name, self.MODEL_NAME.casefold()):
+            recipe_path = (
+                self.models_dir / "checkpoints"
+                / f"{self.MODEL_NAME.casefold()}.recipe.json"
+            )
+            if recipe_path.is_file():
+                candidates = (
+                    self._load_hyperparameter_candidates()
+                    if hyperparameter_search else [{}]
+                )
+                FoldCheckpointStore(
+                    self.models_dir,
+                    self.MODEL_NAME.casefold(),
+                    self._evaluation_recipe(
+                        cross_validation, hyperparameter_search, n_splits, candidates
+                    ),
+                ).prepare()
+            LOGGER.info(
+                "%s on %s already trained; skipping (checkpoint registered).",
+                self.MODEL_NAME,
+                self.dataset_dir.name,
+            )
+            return None
 
         if fold_workers < 1:
             raise ValueError("fold_workers must be greater than or equal to 1")
@@ -68,6 +124,14 @@ class IModelEvaluator:
             and not hyperparameter_search
             and not self.cross_validation_splitter.REQUIRES_EXTERNAL_SPLIT
         ):
+            if (
+                self.models_dir / "checkpoints"
+                / f"{self.MODEL_NAME.casefold()}.recipe.json"
+            ).exists():
+                raise ValueError(
+                    "Evaluation mode changed for this experiment. "
+                    "Remove its results manually to start a new run."
+                )
             return self._evaluate_simple()
         
         splitter = self.cross_validation_splitter(
@@ -75,9 +139,24 @@ class IModelEvaluator:
             n_splits=n_splits,
             seed=base_config["seed"],
         )
+        ensure_recorded_split_reusable(
+            self.experiment_dir, self.dataset_dir.name, splitter
+        )
         split_statistics = splitter.prepare()
 
         candidates = self._load_hyperparameter_candidates() if hyperparameter_search else [{}]
+        if not isinstance(candidates, list) or not candidates or not all(
+            isinstance(candidate, dict) for candidate in candidates
+        ):
+            raise ValueError(f"Invalid hyperparameter configurations: {self.hp_search_config_path}")
+
+        recipe = self._evaluation_recipe(
+            cross_validation, hyperparameter_search, n_splits, candidates
+        )
+        checkpoint_store = FoldCheckpointStore(
+            self.models_dir, self.MODEL_NAME.casefold(), recipe
+        )
+        checkpoint_store.prepare()
         
         fold_indexes = list(range(n_splits)) if cross_validation else [0]
         validation_runs = len(candidates) * len(fold_indexes)
@@ -127,6 +206,7 @@ class IModelEvaluator:
             base_seed=base_config["seed"],
             fold_workers=effective_fold_workers,
             validation_metric=validation_metric,
+            checkpoint_store=checkpoint_store,
             first_candidate_callback=log_runtime_estimate,
         )
 
@@ -149,6 +229,7 @@ class IModelEvaluator:
             splitter.final_benchmark(),
             best_candidate["hyperparameters"],
             best_candidate["median_epoch"],
+            checkpoint_store.identity,
         )
         
         results = {
@@ -174,16 +255,32 @@ class IModelEvaluator:
         base_seed,
         fold_workers,
         validation_metric,
+        checkpoint_store,
         first_candidate_callback=None,
     ):
         """Evaluate one continuous queue of folds across all candidates."""
         fold_results_by_candidate = [[] for _ in candidates]
-        first_fold = fold_indexes[0]
         first_fold_elapsed = None
         start_time = time.perf_counter()
+        pending = []
+        for candidate_index, hyperparameters in enumerate(candidates):
+            for fold in fold_indexes:
+                run_seed = base_seed + fold
+                cached = checkpoint_store.load(
+                    fold, candidate_index, hyperparameters, run_seed
+                )
+                if cached is None:
+                    pending.append((candidate_index, fold, hyperparameters, run_seed))
+                else:
+                    fold_results_by_candidate[candidate_index].append(cached)
+                    LOGGER.info(
+                        "Reusing %s fold %d configuration %d",
+                        self.MODEL_NAME, fold, candidate_index,
+                    )
 
         progress = tqdm(
             total=len(candidates) * len(fold_indexes),
+            initial=len(candidates) * len(fold_indexes) - len(pending),
             desc="  validation",
             unit="fold",
             dynamic_ncols=True,
@@ -191,47 +288,49 @@ class IModelEvaluator:
 
         executor = None
         futures = {}
+        failed = False
 
         try:
             if fold_workers == 1:
-                for candidate_index, hyperparameters in enumerate(candidates):
-                    for fold in fold_indexes:
-                        result = self._evaluate_fold(
-                            fold=fold,
-                            benchmark_filename=splitter.fold_benchmark(fold),
-                            hyperparameters=hyperparameters,
-                            run_seed=base_seed + fold,
-                        )
-                        fold_results_by_candidate[candidate_index].append(result)
-                        progress.update()
-                        progress.set_postfix(score=f"{result['score']:.4f}")
+                for candidate_index, fold, hyperparameters, run_seed in pending:
+                    result = self._evaluate_fold(
+                        fold=fold,
+                        benchmark_filename=splitter.fold_benchmark(fold),
+                        hyperparameters=hyperparameters,
+                        run_seed=run_seed,
+                        config_index=candidate_index,
+                        checkpoint_store=checkpoint_store,
+                    )
+                    fold_results_by_candidate[candidate_index].append(result)
+                    progress.update()
+                    progress.set_postfix(score=f"{result['score']:.4f}")
 
-                        if candidate_index == 0 and fold == first_fold:
-                            first_fold_elapsed = time.perf_counter() - start_time
-
-                        if (
-                            candidate_index == 0
-                            and len(fold_results_by_candidate[0]) == len(fold_indexes)
-                            and first_candidate_callback is not None
-                        ):
-                            first_candidate_callback(first_fold_elapsed)
-            else:
+                    if first_fold_elapsed is None:
+                        first_fold_elapsed = time.perf_counter() - start_time
+                    if (
+                        candidate_index == 0
+                        and len(fold_results_by_candidate[0]) == len(fold_indexes)
+                        and first_candidate_callback is not None
+                    ):
+                        first_candidate_callback(first_fold_elapsed)
+            elif pending:
                 executor = ProcessPoolExecutor(
                     max_workers=fold_workers,
                     mp_context=multiprocessing.get_context("spawn"),
                     initializer=self._configure_project_logging,
                 )
 
-                for candidate_index, hyperparameters in enumerate(candidates):
-                    for fold in fold_indexes:
-                        future = executor.submit(
-                            self._evaluate_fold,
-                            fold,
-                            splitter.fold_benchmark(fold),
-                            hyperparameters,
-                            base_seed + fold,
-                        )
-                        futures[future] = candidate_index
+                for candidate_index, fold, hyperparameters, run_seed in pending:
+                    future = executor.submit(
+                        self._evaluate_fold,
+                        fold,
+                        splitter.fold_benchmark(fold),
+                        hyperparameters,
+                        run_seed,
+                        candidate_index,
+                        checkpoint_store,
+                    )
+                    futures[future] = candidate_index
 
                 for future in as_completed(futures):
                     candidate_index = futures[future]
@@ -240,7 +339,7 @@ class IModelEvaluator:
                     progress.update()
                     progress.set_postfix(score=f"{result['score']:.4f}")
 
-                    if candidate_index == 0 and result["fold"] == first_fold:
+                    if first_fold_elapsed is None:
                         first_fold_elapsed = time.perf_counter() - start_time
 
                     if (
@@ -250,13 +349,17 @@ class IModelEvaluator:
                     ):
                         first_candidate_callback(first_fold_elapsed)
         except BaseException:
+            failed = True
             for future in futures:
                 future.cancel()
+            if executor is not None:
+                executor.shutdown(wait=False, cancel_futures=True)
+                terminate_active_children()
             raise
         finally:
             progress.close()
 
-            if executor is not None:
+            if executor is not None and not failed:
                 executor.shutdown(cancel_futures=True)
 
         candidate_results = []
@@ -288,7 +391,10 @@ class IModelEvaluator:
 
         return candidate_results, first_fold_elapsed
 
-    def _evaluate_fold(self, fold, benchmark_filename, hyperparameters, run_seed):
+    def _evaluate_fold(
+        self, fold, benchmark_filename, hyperparameters, run_seed,
+        config_index, checkpoint_store,
+    ):
         """
         Trains and evaluates one validation fold.
 
@@ -301,18 +407,31 @@ class IModelEvaluator:
         Returns:
             result (dict[str, Any]): Fold index, best epoch, score and metrics.
         """
-        run = self._train_with_validation(
-            benchmark_filename=benchmark_filename,
-            hyperparameters=hyperparameters,
-            run_seed=run_seed,
-        )
-
-        return {
-            "fold": fold,
-            "epoch": run["epoch"],
-            "score": run["score"],
-            "metrics": run["metrics"],
-        }
+        checkpoint_path, _ = checkpoint_store.paths(fold, config_index)
+        temporary_path = temporary_checkpoint(checkpoint_path)
+        try:
+            run = self._train_with_validation(
+                benchmark_filename=benchmark_filename,
+                hyperparameters=hyperparameters,
+                run_seed=run_seed,
+                checkpoint_path=temporary_path,
+            )
+            result = {
+                "fold": fold,
+                "epoch": run["epoch"],
+                "score": run["score"],
+                "metrics": run["metrics"],
+            }
+            self._validate_training_checkpoint(
+                temporary_path, run_seed, result["epoch"], result["score"]
+            )
+            checkpoint_store.save(
+                fold, config_index, hyperparameters, run_seed, result,
+                temporary_path,
+            )
+            return result
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
     def _evaluate_simple(self):
         """
@@ -329,6 +448,7 @@ class IModelEvaluator:
         train_data, valid_data, test_data = data_preparation(config, dataset)
         
         _, trainer = self._create_model_and_trainer(config, train_data)
+        self._ensure_checkpoint_available()
         self._configure_final_checkpoint(trainer)
 
         best_epoch = 0
@@ -392,7 +512,7 @@ class IModelEvaluator:
         
         return results
 
-    def _train_with_validation(self, benchmark_filename, hyperparameters, run_seed):
+    def _train_with_validation(self, benchmark_filename, hyperparameters, run_seed, checkpoint_path):
         """
         Trains the model with validation and returns the best score and metrics.
 
@@ -417,6 +537,7 @@ class IModelEvaluator:
         train_data, valid_data, _ = data_preparation(config, dataset)
         
         _, trainer = self._create_model_and_trainer(config, train_data)
+        trainer.saved_model_file = str(checkpoint_path)
 
         best_epoch = 0
 
@@ -429,7 +550,7 @@ class IModelEvaluator:
         best_score, best_result = trainer.fit(
             train_data,
             valid_data,
-            saved=False,
+            saved=True,
             show_progress=False,
             verbose=False,
             callback_fn=save_best_epoch,
@@ -438,10 +559,12 @@ class IModelEvaluator:
         return {
             "epoch": best_epoch,
             "score": float(best_score),
-            "metrics": best_result,
+            "metrics": {key: float(value) for key, value in best_result.items()},
         }
 
-    def _train_development_and_evaluate_test(self, benchmark_filename, hyperparameters, epochs):
+    def _train_development_and_evaluate_test(
+        self, benchmark_filename, hyperparameters, epochs, recipe_sha256,
+    ):
         """
         Trains the model on the development data and evaluates it on the test data.
 
@@ -465,25 +588,104 @@ class IModelEvaluator:
         train_data, valid_data, test_data = data_preparation(config, dataset)
         
         _, trainer = self._create_model_and_trainer(config, train_data)
-        self._configure_final_checkpoint(trainer)
+        final_record_path = self.models_dir / f"{self.MODEL_NAME.casefold()}.json"
+        reuse_final = False
+        if final_record_path.is_file():
+            try:
+                with final_record_path.open(encoding="utf-8") as input_file:
+                    record = json.load(input_file)
+            except (OSError, json.JSONDecodeError):
+                record = None
+            if isinstance(record, dict) and (
+                record.get("recipe_sha256") == recipe_sha256
+                and record.get("hyperparameters") == hyperparameters
+                and record.get("epochs") == epochs
+            ):
+                reuse_final = self.checkpoint_path.is_file() and (
+                    _file_sha256(self.checkpoint_path)
+                    == record.get("checkpoint_sha256")
+                )
 
-        LOGGER.info(
-            "Starting final evaluation on test set | %d epoch(s)",
-            epochs,
-        )
-        
-        trainer.fit(
-            train_data,
-            valid_data=None,
-            saved=True,
-            show_progress=False,
-            verbose=False,
-        )
-        
+        if reuse_final:
+            LOGGER.info("Reusing completed final training: %s", self.checkpoint_path)
+        else:
+            LOGGER.info(
+                "Starting final evaluation on test set | %d epoch(s)",
+                epochs,
+            )
+            temporary_path = temporary_checkpoint(self.checkpoint_path)
+            try:
+                trainer.saved_model_file = str(temporary_path)
+                trainer.fit(
+                    train_data,
+                    valid_data=None,
+                    saved=True,
+                    show_progress=False,
+                    verbose=False,
+                )
+                self._validate_training_checkpoint(
+                    temporary_path, config["seed"], epochs, None
+                )
+                digest = publish_checkpoint(temporary_path, self.checkpoint_path)
+                _atomic_json_write(final_record_path, {
+                    "recipe_sha256": recipe_sha256,
+                    "hyperparameters": hyperparameters,
+                    "epochs": epochs,
+                    "checkpoint_sha256": digest,
+                })
+            finally:
+                temporary_path.unlink(missing_ok=True)
+
+        trainer.saved_model_file = str(self.checkpoint_path)
         test_result = self._evaluate_saved_model(trainer, test_data)
         self._register_final_checkpoint(trainer)
         LOGGER.info("Saved model | %s", trainer.saved_model_file)
         return test_result
+
+    def _evaluation_recipe(
+        self, cross_validation, hyperparameter_search, n_splits, candidates,
+    ) -> dict:
+        with (self.experiment_dir / "experiment.json").open(encoding="utf-8") as input_file:
+            manifest = json.load(input_file)
+        dataset_entry = manifest["datasets"][self.dataset_dir.name]
+        model_class = self.MODEL_CLASS or get_model(self.MODEL_NAME)
+        source_classes = (type(self), IModelEvaluator, model_class, self.cross_validation_splitter)
+        return {
+            "version": 1,
+            "dataset_sha256": dataset_entry["sha256"],
+            "seed": self.seed,
+            "folds": n_splits,
+            "cross_validation": cross_validation,
+            "hyperparameter_search": hyperparameter_search,
+            "candidates": candidates,
+            "config_sha256": _file_sha256(self.config_path),
+            "search_sha256": (
+                _file_sha256(self.hp_search_config_path) if hyperparameter_search else None
+            ),
+            "source_sha256": {
+                source.__name__: _file_sha256(Path(inspect.getfile(source)))
+                for source in source_classes
+            },
+            "recbole_version": version("recbole"),
+        }
+
+    def _validate_training_checkpoint(
+        self, checkpoint_path: Path, run_seed: int, epoch: int, score: float | None,
+    ) -> None:
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+        config = checkpoint["config"]
+        if (
+            str(config["model"]).casefold() != self.MODEL_NAME.casefold()
+            or str(config["dataset"]).casefold() != self.dataset_dir.name.casefold()
+            or config["seed"] != run_seed
+            or checkpoint["epoch"] != epoch - 1
+            or not checkpoint.get("state_dict")
+        ):
+            raise ValueError(f"Incomplete or mismatched checkpoint: {checkpoint_path}")
+        if score is not None and not np.isclose(
+            checkpoint["best_valid_score"], score, rtol=0, atol=1e-12,
+        ):
+            raise ValueError(f"Checkpoint score mismatch: {checkpoint_path}")
 
     def _build_config(self, overrides = None) -> Config:
         """
@@ -564,11 +766,20 @@ class IModelEvaluator:
         trainer.saved_model_file = str(self.checkpoint_path)
 
     def _ensure_checkpoint_available(self):
+        """Clear an orphan checkpoint left by an interrupted run.
+
+        ``evaluate`` only reaches this point when the model is NOT registered in
+        the manifest. Any ``.pth`` sitting here is therefore an orphan from a
+        job that died after RecBole saved the file but before it was registered.
+        It is safe to discard and retrain, which is what makes a resubmitted job
+        resume cleanly instead of raising FileExistsError.
+        """
         if self.checkpoint_path.exists():
-            raise FileExistsError(
-                f"Model checkpoint already exists and will not be overwritten: "
-                f"{self.checkpoint_path}"
+            LOGGER.info(
+                "Discarding orphan checkpoint from an interrupted run: %s",
+                self.checkpoint_path,
             )
+            discard_orphan_checkpoint(self.checkpoint_path)
 
     def _register_final_checkpoint(self, trainer):
         register_model(

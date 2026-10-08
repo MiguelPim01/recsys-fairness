@@ -141,7 +141,9 @@ if [[ -z "$experiment" ]]; then
     exit 2
 fi
 
-if [[ -x ".venv/bin/python" ]]; then
+if [[ -n "${RECSYS_PYTHON:-}" ]]; then
+    python_command=("$RECSYS_PYTHON")
+elif [[ -x ".venv/bin/python" ]]; then
     python_command=(".venv/bin/python")
 else
     python_command=("uv" "run" "python")
@@ -166,15 +168,49 @@ case "$model" in
             "${evaluation_arguments[@]}"
         ;;
     all)
-        "${python_command[@]}" -m src.scripts.evaluation.eval_neumf \
+        model_pids=()
+
+        cleanup_models() {
+            trap - INT TERM EXIT
+            local pid deadline alive
+
+            for pid in "${model_pids[@]}"; do
+                kill -TERM -- "-$pid" 2>/dev/null || true
+            done
+
+            deadline=$((SECONDS + 5))
+            while (( SECONDS < deadline )); do
+                alive=0
+                for pid in "${model_pids[@]}"; do
+                    if kill -0 -- "-$pid" 2>/dev/null; then
+                        alive=1
+                    fi
+                done
+                (( alive == 0 )) && break
+                sleep 0.1
+            done
+
+            for pid in "${model_pids[@]}"; do
+                kill -KILL -- "-$pid" 2>/dev/null || true
+                wait "$pid" 2>/dev/null || true
+            done
+        }
+
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        trap cleanup_models EXIT
+
+        setsid "${python_command[@]}" -m src.scripts.evaluation.eval_neumf \
             --dataset "$dataset" \
             "${evaluation_arguments[@]}" &
         neumf_pid=$!
+        model_pids+=("$neumf_pid")
 
-        "${python_command[@]}" -m src.scripts.evaluation.eval_multivae \
+        setsid "${python_command[@]}" -m src.scripts.evaluation.eval_multivae \
             --dataset "$dataset" \
             "${evaluation_arguments[@]}" &
         multivae_pid=$!
+        model_pids+=("$multivae_pid")
 
         neumf_status=0
         multivae_status=0

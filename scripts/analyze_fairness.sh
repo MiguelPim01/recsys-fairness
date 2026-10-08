@@ -73,7 +73,9 @@ if [[ -z "$experiment" ]]; then
     exit 2
 fi
 
-if [[ -x ".venv/bin/python" ]]; then
+if [[ -n "${RECSYS_PYTHON:-}" ]]; then
+    python_command=("$RECSYS_PYTHON")
+elif [[ -x ".venv/bin/python" ]]; then
     python_command=(".venv/bin/python")
 else
     python_command=("uv" "run" "python")
