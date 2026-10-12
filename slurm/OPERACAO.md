@@ -213,8 +213,16 @@ O driver do nó foi atualizado sem reiniciar; a GPU só volta com reboot
 (admin do nó). As outras máquinas seguem normais — rode só nelas.
 
 ### O job morreu em segundos e não reencadeou
-Proteção anti-loop (< 5 min não reencadeia). Veja o `.out` para a causa
-(caminho, pylibs, dados), corrija e submeta de novo.
+Erros da aplicação não reencadeiam automaticamente; jobs com menos de 5 min
+também são protegidos contra loop. Veja o `.out` para a causa (caminho,
+pylibs, dados), corrija e submeta de novo. Uma seed com erro não impede o
+worker de tentar as outras seeds atribuídas.
+
+### Amostra incompleta após interrupção
+Se o dataset ainda não estiver registrado no `experiment.json`, a próxima
+execução preserva a pasta inválida com sufixo `.invalid.<data>.<id>` e gera
+a amostra novamente. Amostras ligadas a resultados registrados permanecem
+protegidas; nesses casos, examine o erro antes de alterar os resultados.
 
 ### "seed já complete; skipping" mas eu quero refazer
 Uma seed `complete` é intencionalmente pulada. Para refazer uma seed do

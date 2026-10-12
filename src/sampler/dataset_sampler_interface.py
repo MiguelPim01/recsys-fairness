@@ -1,10 +1,14 @@
 import csv
+import fcntl
 import hashlib
 import json
 import os
 import random
+import shutil
 import tempfile
+import uuid
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 
 from tqdm.auto import tqdm
@@ -26,7 +30,7 @@ class IDatasetSampler:
         self.minimum_user_interactions = minimum_user_interactions
         self.source_variant = source_variant
 
-    def create_sample(self):
+    def create_sample(self, *, allow_rebuild_invalid=False):
         """
         Selects items with the most interactions, and then, selects users randomly with only
         enough interactions for the fold split.
@@ -34,15 +38,65 @@ class IDatasetSampler:
         Returns:
             statistics: Statistics about the sampling process.
         """
-        reusable_statistics = self._reusable_statistics()
-        if reusable_statistics is not None:
-            return {**reusable_statistics, "reused": True}
+        parent = self.output_dir.parent
+        parent.mkdir(parents=True, exist_ok=True)
+        lock_path = parent / f".{self.output_dir.name}.sample.lock"
+        with lock_path.open("a+") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            self._cleanup_stale_builds(parent)
+            reusable_statistics, reason = self._inspect_sample(self.output_dir)
+            if reusable_statistics is not None:
+                return {**reusable_statistics, "reused": True}
 
-        if self.output_dir.exists() and any(self.output_dir.iterdir()):
-            raise FileExistsError(
-                "Sample directory exists but is incomplete or incompatible and "
-                f"will not be overwritten: {self.output_dir}"
-            )
+            existing = self.output_dir.exists() or self.output_dir.is_symlink()
+            invalid_reason = reason
+            if existing and not allow_rebuild_invalid:
+                raise FileExistsError(
+                    f"Sample directory is {reason}; automatic replacement is "
+                    f"disabled to protect recorded results: {self.output_dir}"
+                )
+
+            staging_dir = Path(tempfile.mkdtemp(
+                prefix=f".{self.output_dir.name}.building.", dir=parent
+            ))
+            try:
+                statistics = self._generate_sample(staging_dir)
+                verified, generated_reason = self._inspect_sample(staging_dir)
+                if verified is None:
+                    raise RuntimeError(
+                        f"Generated sample failed validation: {generated_reason}"
+                    )
+
+                if existing:
+                    backup = parent / (
+                        f"{self.output_dir.name}.invalid."
+                        f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}."
+                        f"{uuid.uuid4().hex}"
+                    )
+                    self.output_dir.rename(backup)
+                    print(
+                        f"Sample at {self.output_dir} is {invalid_reason}; "
+                        f"preserved as {backup}",
+                        flush=True,
+                    )
+
+                staging_dir.rename(self.output_dir)
+                return {**statistics, "reused": False}
+            finally:
+                if staging_dir.exists():
+                    shutil.rmtree(staging_dir)
+
+    def _cleanup_stale_builds(self, parent):
+        """Discard only scratch directories left by an interrupted build."""
+        for path in parent.glob(f".{self.output_dir.name}.building.*"):
+            if path.is_dir() and not path.is_symlink():
+                try:
+                    shutil.rmtree(path)
+                except OSError as error:
+                    print(f"Could not remove stale sample build {path}: {error}", flush=True)
+
+    def _generate_sample(self, output_dir):
+        """Build a complete sample in a private staging directory."""
 
         # 1. Define data paths and count the number of rows in each file
         interaction_path = self.source_dir / f"{self.DATASET_NAME}.inter"
@@ -59,11 +113,9 @@ class IDatasetSampler:
         eligible_users = self._eligible_users(interaction_path, selected_items, interaction_total)
         selected_users = self._select_users(eligible_users)
 
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        output_interaction_path = self.output_dir / f"{self.DATASET_NAME}.inter"
-        output_user_path = self.output_dir / f"{self.DATASET_NAME}.user"
-        output_item_path = self.output_dir / f"{self.DATASET_NAME}.item"
+        output_interaction_path = output_dir / f"{self.DATASET_NAME}.inter"
+        output_user_path = output_dir / f"{self.DATASET_NAME}.user"
+        output_item_path = output_dir / f"{self.DATASET_NAME}.item"
 
         # 3. Write the selected interactions, users, and items to new files
         interaction_count, interacted_items = self._write_interactions(
@@ -114,8 +166,8 @@ class IDatasetSampler:
             "seed": self.seed,
             "minimum_user_interactions": self.minimum_user_interactions,
         }
-        self._write_manifest(statistics)
-        return {**statistics, "reused": False}
+        self._write_manifest(statistics, output_dir)
+        return statistics
 
     @property
     def manifest_path(self):
@@ -132,41 +184,46 @@ class IDatasetSampler:
             "source_variant": self.source_variant,
         }
 
-    def _reusable_statistics(self):
-        if not self.manifest_path.is_file():
-            return None
+    def _inspect_sample(self, output_dir):
+        manifest_path = output_dir / f"{self.DATASET_NAME}.sample_manifest.json"
+        if not manifest_path.is_file():
+            return None, "missing its sample manifest"
 
         try:
-            with self.manifest_path.open(encoding="utf-8") as input_file:
+            with manifest_path.open(encoding="utf-8") as input_file:
                 manifest = json.load(input_file)
         except (json.JSONDecodeError, OSError):
-            return None
+            return None, "an unreadable sample manifest"
+
+        if not isinstance(manifest, dict):
+            return None, "an invalid sample manifest"
 
         configuration = self._manifest_configuration()
         if any(manifest.get(key) != value for key, value in configuration.items()):
-            return None
+            return None, "an incompatible sample configuration"
 
         expected_hashes = manifest.get("files")
         statistics = manifest.get("statistics")
         if not isinstance(expected_hashes, dict) or not isinstance(statistics, dict):
-            return None
-
-        for suffix, expected_hash in expected_hashes.items():
-            path = self.output_dir / f"{self.DATASET_NAME}.{suffix}"
-            if not path.is_file() or self._sha256(path) != expected_hash:
-                return None
+            return None, "an incomplete sample manifest"
 
         if set(expected_hashes) != {"inter", "item", "user"}:
-            return None
-        
-        return statistics
+            return None, "an incomplete file list"
 
-    def _write_manifest(self, statistics):
+        for suffix, expected_hash in expected_hashes.items():
+            path = output_dir / f"{self.DATASET_NAME}.{suffix}"
+            if not path.is_file() or self._sha256(path) != expected_hash:
+                return None, f"a missing or modified {suffix} file"
+
+        return statistics, None
+
+    def _write_manifest(self, statistics, output_dir):
+        manifest_path = output_dir / f"{self.DATASET_NAME}.sample_manifest.json"
         document = {
             **self._manifest_configuration(),
             "files": {
                 suffix: self._sha256(
-                    self.output_dir / f"{self.DATASET_NAME}.{suffix}"
+                    output_dir / f"{self.DATASET_NAME}.{suffix}"
                 )
                 for suffix in ("inter", "item", "user")
             },
@@ -178,8 +235,8 @@ class IDatasetSampler:
             with tempfile.NamedTemporaryFile(
                 mode="w",
                 encoding="utf-8",
-                dir=self.output_dir,
-                prefix=f".{self.manifest_path.name}.",
+                dir=output_dir,
+                prefix=f".{manifest_path.name}.",
                 suffix=".tmp",
                 delete=False,
             ) as output_file:
@@ -188,7 +245,7 @@ class IDatasetSampler:
                 output_file.write("\n")
                 output_file.flush()
                 os.fsync(output_file.fileno())
-            os.replace(temporary_path, self.manifest_path)
+            os.replace(temporary_path, manifest_path)
         except Exception:
             if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()

@@ -125,6 +125,18 @@ def experiment_status(experiment_dir: Path) -> str:
     return str(manifest.get("status", "unknown"))
 
 
+def is_dataset_recorded(experiment_dir: Path, dataset: str) -> bool:
+    """Protect samples that already have experiment results tied to them."""
+    lock_path = experiment_dir / ".experiment.json.lock"
+    with lock_path.open("a+") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        manifest = _read_json(experiment_dir / "experiment.json")
+        datasets = manifest.get("datasets") if isinstance(manifest, dict) else None
+        if not isinstance(datasets, dict):
+            raise ValueError(f"Invalid experiment datasets: {experiment_dir}")
+        return dataset in datasets
+
+
 def is_experiment_complete(user_limit: int, item_limit: int, seed: int) -> bool:
     """Return True only when the completed campaign's artifacts still verify."""
     path = experiment_root(user_limit, item_limit) / f"seed_{seed}"

@@ -2,6 +2,7 @@ import argparse
 import os
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 
 from src.utils.experiments import (
@@ -198,26 +199,37 @@ def run_campaign(
     folds: int,
     fold_workers: int,
     use_restaurants_users_only: bool,
-) -> None:
+) -> int:
     assigned = seeds_for_worker(seeds, worker_index, worker_count)
     print(
         f"Worker {worker_index}/{worker_count} owns seeds: "
         f"{assigned or '(none)'}",
         flush=True,
     )
+    failed = []
     for seed in assigned:
-        run_seed(
-            seed=seed,
-            user_limit=user_limit,
-            item_limit=item_limit,
-            folds=folds,
-            fold_workers=fold_workers,
-            use_restaurants_users_only=use_restaurants_users_only,
-        )
+        try:
+            run_seed(
+                seed=seed,
+                user_limit=user_limit,
+                item_limit=item_limit,
+                folds=folds,
+                fold_workers=fold_workers,
+                use_restaurants_users_only=use_restaurants_users_only,
+            )
+        except Exception:
+            failed.append(seed)
+            print(f"[seed {seed}] failed; continuing with remaining seeds.", flush=True)
+            traceback.print_exc()
+
+    if failed:
+        print(f"Worker {worker_index}/{worker_count} failed seeds: {failed}", flush=True)
+        return 1
     print(
         f"Worker {worker_index}/{worker_count} finished its assigned seeds.",
         flush=True,
     )
+    return 0
 
 
 def count_pending(
@@ -276,13 +288,13 @@ def _parse_arguments():
     return parser.parse_args()
 
 
-def main() -> None:
+def main() -> int | None:
     arguments = _parse_arguments()
     seeds = parse_seed_list(arguments.seeds)
 
     if arguments.command == "run":
         handle_sigterm()
-        run_campaign(
+        return run_campaign(
             seeds=seeds,
             worker_index=arguments.worker_index,
             worker_count=arguments.worker_count,
@@ -292,7 +304,6 @@ def main() -> None:
             fold_workers=arguments.fold_workers,
             use_restaurants_users_only=arguments.use_restaurants_users_only,
         )
-        return
 
     if arguments.command == "pending":
         print(

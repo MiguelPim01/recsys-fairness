@@ -63,9 +63,11 @@ Cada job é um worker. Ao terminar — por concluir suas seeds **ou** por bater
 no deadline — o `run-array.sbatch`:
 
 - se foi **cancelado** (`scancel`, SIGTERM): **não** reencadeia;
-- se morreu por **tempo** (SIGUSR1, 120s antes do limite) ou saiu com seeds
-  pendentes: verifica `pending > 0` **e** se a reserva ainda vale com a
-  margem; se ambos, **resubmete a si mesmo** com um novo deadline.
+- se terminou com erro de uma ou mais seeds: tenta todas as seeds atribuídas,
+  informa quais falharam e **não** reencadeia automaticamente;
+- se morreu por **tempo** (SIGUSR1, 120s antes do limite) ou terminou sem
+  erro com seeds pendentes: verifica `pending > 0` **e** se a reserva ainda
+  vale com a margem; se ambos, **resubmete a si mesmo** com um novo deadline.
 - **anti-loop:** jobs que duram menos de 5 min não reencadeiam (evita
   queimar a reserva repetindo um erro de configuração).
 

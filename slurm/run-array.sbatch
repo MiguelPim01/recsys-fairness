@@ -26,9 +26,9 @@
 # imagem: são pré-instaladas no NFS (ver setup_nfs.sh) e entram via
 # PYTHONPATH=$RF_PYLIBS. O torch é SEMPRE o do container (não sobrescrever).
 #
-# AUTO-RESUBMISSÃO: ao terminar (por concluir as seeds ou por bater no
-# --deadline da reserva), o job verifica (a) ainda faltam seeds? e (b) a
-# reserva ainda vale com a margem? Se ambos, resubmete a si mesmo.
+# AUTO-RESUBMISSÃO: ao terminar sem erro ou por bater no --deadline, o job
+# verifica (a) ainda faltam seeds? e (b) a reserva ainda vale com a margem?
+# Erros da aplicação não são reencadeados automaticamente.
 # =====================================================================
 
 #SBATCH --job-name=rf-run
@@ -155,7 +155,17 @@ maybe_resubmit() {
 USER_CANCELLED=0; TIME_LIMIT_HIT=0
 on_usr1() { TIME_LIMIT_HIT=1; echo ">> SIGUSR1 (TimeLimit/deadline): reencadeando antes de morrer."; maybe_resubmit || true; }
 on_term() { USER_CANCELLED=1; echo ">> SIGTERM (scancel manual): NÃO reencadeia."; [[ -n "${APP_PID:-}" ]] && kill "$APP_PID" 2>/dev/null; exit 143; }
-on_exit() { (( TIME_LIMIT_HIT )) && return 0; (( USER_CANCELLED )) && return 0; maybe_resubmit || true; }
+on_exit() {
+    local exit_status=$?
+    if (( TIME_LIMIT_HIT || USER_CANCELLED )); then
+        return 0
+    fi
+    if (( exit_status != 0 )); then
+        echo "worker terminou com erro (status=$exit_status); NÃO reencadeia automaticamente." >&2
+        return 0
+    fi
+    maybe_resubmit || true
+}
 trap on_usr1 USR1
 trap on_term TERM
 trap on_exit EXIT

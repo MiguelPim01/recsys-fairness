@@ -2,7 +2,12 @@ import argparse
 from pathlib import Path
 
 from src.sampler.yelp_sampler import YelpSampler
-from src.utils.experiments import experiment_seed, resolve_experiment, sample_root
+from src.utils.experiments import (
+    experiment_seed,
+    is_dataset_recorded,
+    resolve_experiment,
+    sample_root,
+)
 from src.utils.sample_statistics import generate_sample_statistics
 from src.utils.transforms import read_transform_variant
 
@@ -77,7 +82,9 @@ def main():
         minimum_user_interactions=arguments.minimum_user_interactions,
         source_variant=source_variant,
     )
-    statistics = sampler.create_sample()
+    statistics = sampler.create_sample(
+        allow_rebuild_invalid=not is_dataset_recorded(experiment_dir, "yelp")
+    )
 
     statistics_output_dir = experiment_dir / "yelp" / "sample_statistics"
     generate_sample_statistics(
