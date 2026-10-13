@@ -30,7 +30,11 @@ def read_transform_variant(output_dir: Path, dataset: str):
     except json.JSONDecodeError as error:
         raise ValueError(f"Invalid transformation manifest: {path}") from error
 
-    if manifest.get("version") != MANIFEST_VERSION or manifest.get("dataset") != dataset:
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("version") != MANIFEST_VERSION
+        or manifest.get("dataset") != dataset
+    ):
         raise ValueError(f"Incompatible transformation manifest: {path}")
     return manifest.get("variant")
 

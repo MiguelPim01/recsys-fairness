@@ -7,8 +7,8 @@ from pathlib import Path
 
 from src.data.lastfm import LastFMTransformDataset
 from src.utils.transforms import (
+    can_reuse_transformation,
     invalidate_transform_manifest,
-    transformed_files_exist,
     write_transform_manifest,
 )
 
@@ -41,8 +41,7 @@ def main():
     arguments = parse_arguments()
     variant = {"format": "default"}
 
-    if transformed_files_exist(arguments.output_dir, "lastfm"):
-        write_transform_manifest(arguments.output_dir, "lastfm", variant)
+    if can_reuse_transformation(arguments.output_dir, "lastfm", variant):
         print(f"Reusing transformed LastFM data in {arguments.output_dir.resolve()}")
         return
     

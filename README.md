@@ -25,6 +25,16 @@ uv sync
 
 ### Run experiments
 
+Transform the raw datasets once before starting experiments:
+```bash
+make run_etl
+```
+For users with a strong preference for restaurants, run
+`make run_etl USE_RESTAURANTS_USERS_ONLY=true` and use the same flag when
+running experiments. Run the transformation again only when changing this
+option or rebuilding the processed data. A run interrupted before its
+transformation manifest is written can be safely repeated.
+
 You can run all the experiments with the command:
 ```bash
 make run_experiments USER_LIMIT=<N> ITEM_LIMIT=<M> SEED=<K> USE_RESTAURANTS_USERS_ONLY=<flag>
@@ -34,7 +44,7 @@ Possible flag values:
 - `USER_LIMIT`: Quantity of users to be used for experimenting. Defaults to 1000.
 - `ITEM_LIMIT`: Quantity of items to be used for experimenting. Defaults to 1000.
 - `SEED`: Random seed used by sampling, splits, training, and fairness analysis. Defaults to 42.
-- `USE_RESTAURANTS_USERS_ONLY`: Wether to use only users that have a strong preference for restaurants. Defaults to false.
+- `USE_RESTAURANTS_USERS_ONLY`: Whether to use only users that have a strong preference for restaurants. Defaults to false. This must match the earlier transformation.
 
 This creates an experiment identified by its seed and runs the pipeline for all
 models and datasets. Samples are kept separately from result artifacts:
@@ -47,16 +57,34 @@ data/sample/<users>_<items>/seed_<K>/<dataset>/
 
 results/<users>_<items>/seed_<K>/<dataset>/
 ├── models/{neumf,multivae}.pth
+├── models/checkpoints/fold_<F>/config_<C>/{neumf,multivae}.{pth,json}
 ├── results.json
 ├── k_clusters_fairness.json
 └── sample_statistics/
 ```
 
-Running the same limits and seed again fails without overwriting the existing
-result. A complete, validated sample is reused without being regenerated.
-Complete transformed files are also reused; for Yelp, the recorded transformation
-mode must match `USE_RESTAURANTS_USERS_ONLY`. `make clean` preserves versioned
-samples and removes only transformed data.
+Running the same limits and seed again resumes the experiment. A complete
+experiment is skipped without changing its results; an incomplete experiment
+reuses validated samples, splits, and model checkpoints. Experiments do not
+run the ETL: pending seeds require processed LastFM and Yelp files with
+completed transformation manifests, and the Yelp mode must match
+`USE_RESTAURANTS_USERS_ONLY`. `make clean` preserves versioned samples and
+removes only transformed data; run the transformation again after cleaning.
+
+During cross-validation, each completed fold keeps its best model and validation
+metrics in `models/checkpoints/fold_<F>/config_<C>/`. `config_<C>` is the
+zero-based position in that model's hyperparameter list; the JSON records the
+actual values and the checkpoint checksum. Interrupted runs reuse valid folds,
+retrain only missing or damaged folds, and recover a completed final training
+run when possible. Changed datasets or model configurations in the same
+experiment directory cause an error; delete that experiment's results directory
+manually to start over with the same user/item limits and seed.
+
+Validation folds are assigned across users in a continuous rotation. Their total
+interaction counts differ by at most one, while each user's development
+interactions remain distributed as evenly as possible. Existing experiments
+retain their recorded split version; use a new seed or limits for the updated
+assignment without replacing their results.
 
 You can also run each script separately.
 
@@ -100,12 +128,17 @@ Possible flags:
   parallel across hyperparameter candidates. Defaults to `1` and applies per
   model process; `--model all` can therefore run up to twice this number.
 
+With `--model all`, one model continues running if the other fails; the command
+returns a failure after both finish. Ctrl+C or SIGTERM stops both models and
+their fold workers. The campaign also stops processes from its active step when
+it is interrupted.
+
 Validation ranks each positive interaction against 100 uniformly sampled
 negative items (`uni100`). Hyperparameter selection therefore uses sampled
 Recall, NDCG, and MRR. The final test and group-fairness analysis use full-sort
 evaluation over the complete item catalog.
 
-Training only writes the final checkpoints. Fairness analysis is a separate step
+Training writes fold checkpoints and the final model. Fairness analysis is a separate step
 that can be rerun without training:
 
 ```bash

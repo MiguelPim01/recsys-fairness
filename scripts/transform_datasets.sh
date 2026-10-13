@@ -10,7 +10,9 @@ if (( $# > 0 )); then
     shift
 fi
 
-if [[ -x ".venv/bin/python" ]]; then
+if [[ -n "${RECSYS_PYTHON:-}" ]]; then
+    python_command=("$RECSYS_PYTHON")
+elif [[ -x ".venv/bin/python" ]]; then
     python_command=(".venv/bin/python")
 else
     python_command=("uv" "run" "python")

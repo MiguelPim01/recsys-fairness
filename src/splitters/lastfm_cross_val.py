@@ -12,7 +12,7 @@ class LastFMCrossValidationSplitter(ICrossValidationSplitter):
 
     DATASET_NAME = DATASET_NAME
     MANIFEST_FILENAME = MANIFEST_FILENAME
-    MANIFEST_VERSION = 2
+    MANIFEST_VERSION = 3
     REQUIRES_EXTERNAL_SPLIT = True
 
     @staticmethod
