@@ -9,6 +9,25 @@ from pathlib import Path
 
 from src.utils.experiments import _atomic_json_write, _file_sha256
 
+LEGACY_EVALUATOR_SHA256 = "4555964934ce75ca3fd410a6e2a9b5bcc3720ac5913bec2ce534f03472e040bd"
+TRACKING_EVALUATOR_SHA256 = "f4748f8f6e930a1ee61e9bbfaaaa63e25fbbb7f4d550399a210263722abedf3e"
+
+
+def _tracking_only_recipe_change(saved: dict, current: dict) -> bool:
+    old_sources = saved.get("source_sha256")
+    new_sources = current.get("source_sha256")
+    if not isinstance(old_sources, dict) or not isinstance(new_sources, dict):
+        return False
+    if (
+        old_sources.get("IModelEvaluator") != LEGACY_EVALUATOR_SHA256
+        or new_sources.get("IModelEvaluator") != TRACKING_EVALUATOR_SHA256
+    ):
+        return False
+    return (
+        {**saved, "source_sha256": {**old_sources, "IModelEvaluator": None}}
+        == {**current, "source_sha256": {**new_sources, "IModelEvaluator": None}}
+    )
+
 
 def recipe_hash(recipe: dict) -> str:
     encoded = json.dumps(recipe, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -57,10 +76,15 @@ class FoldCheckpointStore:
             except (OSError, json.JSONDecodeError) as error:
                 raise ValueError(f"Invalid experiment recipe: {self.recipe_path}") from error
             if saved != self.recipe:
-                raise ValueError(
-                    f"Inputs or methodology changed for {self.model}: {self.recipe_path}. "
-                    "Remove this experiment's results manually to start a new run."
-                )
+                if _tracking_only_recipe_change(saved, self.recipe):
+                    # Fold JSONs retain the original recipe hash; keep using it.
+                    self.recipe = saved
+                    self.identity = recipe_hash(saved)
+                else:
+                    raise ValueError(
+                        f"Inputs or methodology changed for {self.model}: {self.recipe_path}. "
+                        "Remove this experiment's results manually to start a new run."
+                    )
             return
 
         if any(self.root.glob(f"fold_*/config_*/{self.model}.*")):

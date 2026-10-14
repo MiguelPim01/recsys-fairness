@@ -35,6 +35,12 @@ from src.utils.experiments import (
     register_model,
 )
 from src.utils.processes import terminate_active_children
+from src.utils.tracking import (
+    enabled as tracking_enabled,
+    record_recbole_config,
+    run_config,
+    track,
+)
 
 LOGGER = logging.getLogger("recsys_fairness.evaluation")
 
@@ -225,12 +231,39 @@ class IModelEvaluator:
         )
 
         # 3. Final evaluation: trains model with development data and evaluates on test data.
-        test_result = self._train_development_and_evaluate_test(
-            splitter.final_benchmark(),
-            best_candidate["hyperparameters"],
-            best_candidate["median_epoch"],
-            checkpoint_store.identity,
+        selected_index = candidate_results.index(best_candidate)
+        name = f"{self.dataset_dir.name}-{self.MODEL_NAME.casefold()}-final"
+        config = run_config(
+            self.experiment_dir, self.dataset_dir.name, self.MODEL_NAME,
+            self.user_limit, self.item_limit, self.seed,
+            selected_config_index=selected_index,
+            hyperparameters=best_candidate["hyperparameters"],
+            recipe_sha256=checkpoint_store.identity,
         )
+        with track(name, "final", config) as tracking_run:
+            test_result = self._train_development_and_evaluate_test(
+                splitter.final_benchmark(),
+                best_candidate["hyperparameters"],
+                best_candidate["median_epoch"],
+                checkpoint_store.identity,
+            )
+            if tracking_run is not None:
+                tracking_run.summary["validation/mean_score"] = best_candidate["mean_score"]
+                tracking_run.summary["validation/std_score"] = best_candidate["std_score"]
+                tracking_run.summary["validation/median_epoch"] = best_candidate["median_epoch"]
+                tracking_run.summary["candidates"] = [
+                    {
+                        "index": index,
+                        "hyperparameters": candidate["hyperparameters"],
+                        "mean_score": candidate["mean_score"],
+                        "std_score": candidate["std_score"],
+                        "mean_metrics": candidate["mean_metrics"],
+                        "std_metrics": candidate["std_metrics"],
+                    }
+                    for index, candidate in enumerate(candidate_results)
+                ]
+                for metric, value in test_result.items():
+                    tracking_run.summary[f"test/{metric}"] = float(value)
         
         results = {
             "mode": {
@@ -410,38 +443,66 @@ class IModelEvaluator:
         checkpoint_path, _ = checkpoint_store.paths(fold, config_index)
         temporary_path = temporary_checkpoint(checkpoint_path)
         try:
-            run = self._train_with_validation(
-                benchmark_filename=benchmark_filename,
+            name = (
+                f"{self.dataset_dir.name}-{self.MODEL_NAME.casefold()}"
+                f"-c{config_index:02d}-f{fold:02d}"
+            )
+            config = run_config(
+                self.experiment_dir, self.dataset_dir.name, self.MODEL_NAME,
+                self.user_limit, self.item_limit, self.seed,
+                config_index=config_index, fold=fold, run_seed=run_seed,
                 hyperparameters=hyperparameters,
-                run_seed=run_seed,
-                checkpoint_path=temporary_path,
+                recipe_sha256=checkpoint_store.identity,
             )
-            result = {
-                "fold": fold,
-                "epoch": run["epoch"],
-                "score": run["score"],
-                "metrics": run["metrics"],
-            }
-            self._validate_training_checkpoint(
-                temporary_path, run_seed, result["epoch"], result["score"]
-            )
-            checkpoint_store.save(
-                fold, config_index, hyperparameters, run_seed, result,
-                temporary_path,
-            )
-            return result
+            with track(name, "fold", config) as tracking_run:
+                training = self._train_with_validation(
+                    benchmark_filename=benchmark_filename,
+                    hyperparameters=hyperparameters,
+                    run_seed=run_seed,
+                    checkpoint_path=temporary_path,
+                )
+                result = {
+                    "fold": fold,
+                    "epoch": training["epoch"],
+                    "score": training["score"],
+                    "metrics": training["metrics"],
+                }
+                self._validate_training_checkpoint(
+                    temporary_path, run_seed, result["epoch"], result["score"]
+                )
+                checkpoint_store.save(
+                    fold, config_index, hyperparameters, run_seed, result,
+                    temporary_path,
+                )
+                if tracking_run is not None:
+                    tracking_run.summary["validation/best_epoch"] = result["epoch"]
+                    tracking_run.summary["validation/best_score"] = result["score"]
+                    for metric, value in result["metrics"].items():
+                        tracking_run.summary[f"validation/best_{metric}"] = value
+                return result
         finally:
             temporary_path.unlink(missing_ok=True)
 
     def _evaluate_simple(self):
+        config = self._build_config()
+        name = f"{self.dataset_dir.name}-{self.MODEL_NAME.casefold()}-final"
+        metadata = run_config(
+            self.experiment_dir, self.dataset_dir.name, self.MODEL_NAME,
+            self.user_limit, self.item_limit, self.seed,
+            cross_validation=False, hyperparameter_search=False,
+        )
+        with track(name, "final", metadata) as tracking_run:
+            return self._evaluate_simple_tracked(config, tracking_run)
+
+    def _evaluate_simple_tracked(self, config, tracking_run):
         """
         Evaluates with neither cross validation nor hyperparameter search.
 
         Returns:
             results (dict): Evaluation results.
         """
-        config = self._build_config()
-        
+        if tracking_run is not None:
+            record_recbole_config(config)
         init_seed(config["seed"], config["reproducibility"])
 
         dataset = create_dataset(config)
@@ -509,6 +570,14 @@ class IModelEvaluator:
         LOGGER.info("Test | %s", self._format_metrics(test_result))
         
         LOGGER.info("Saved model | %s", trainer.saved_model_file)
+
+        if tracking_run is not None:
+            tracking_run.summary["validation/best_epoch"] = best_epoch
+            tracking_run.summary["validation/best_score"] = float(best_valid_score)
+            for metric, value in best_valid_result.items():
+                tracking_run.summary[f"validation/best_{metric}"] = float(value)
+            for metric, value in test_result.items():
+                tracking_run.summary[f"test/{metric}"] = float(value)
         
         return results
 
@@ -530,6 +599,8 @@ class IModelEvaluator:
             "show_progress": False,
             **hyperparameters,
         })
+        if tracking_enabled():
+            record_recbole_config(config)
         
         init_seed(config["seed"], config["reproducibility"])
         
@@ -581,6 +652,8 @@ class IModelEvaluator:
             "epochs": epochs,
             **hyperparameters,
         })
+        if tracking_enabled():
+            record_recbole_config(config)
         
         init_seed(config["seed"], config["reproducibility"])
         
@@ -704,6 +777,8 @@ class IModelEvaluator:
             "seed": self.seed,
             **(overrides or {}),
         }
+        if tracking_enabled():
+            config_dict["log_wandb"] = True
         
         # patch will make Config RecBole consider that there is no argv
         with patch.object(sys, "argv", [sys.argv[0]]):

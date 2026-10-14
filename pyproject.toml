@@ -10,4 +10,5 @@ dependencies = [
     "numpy<2.0.0",
     "recbole>=1.2.1",
     "scikit-learn>=1.7.2",
+    "wandb>=0.30.0",
 ]

@@ -1,6 +1,7 @@
 """Rebuild fairness artifacts from immutable experiment checkpoints."""
 
 import argparse
+import json
 import warnings
 from functools import partial
 from pathlib import Path
@@ -15,10 +16,12 @@ from src.fairness import GroupFairnessAnalyzer
 from src.models.multivae import MultiVAE
 from src.models.neumf import NeuMF
 from src.utils.experiments import (
+    experiment_seed,
     resolve_experiment,
     validate_experiment_dataset,
     validate_model_checkpoint,
 )
+from src.utils.tracking import enabled as tracking_enabled, run_config, track
 
 MODELS = {
     "neumf": ("NeuMF", NeuMF),
@@ -85,6 +88,7 @@ def analyze_checkpoint(experiment_dir: Path, dataset_dir: Path, dataset_name: st
     config["data_path"] = str(dataset_dir.resolve())
     config["checkpoint_dir"] = str((dataset_output_dir / "models").resolve())
     config["fairness"]["output_dir"] = str(dataset_output_dir.resolve())
+    config["log_wandb"] = False
 
     init_seed(config["seed"], config["reproducibility"])
     dataset = create_dataset(config)
@@ -112,17 +116,42 @@ def analyze_checkpoint(experiment_dir: Path, dataset_dir: Path, dataset_name: st
         algorithm=model_name,
         config=config,
     )
-    _, results_path = analyzer.analyze(
+    analysis, results_path = analyzer.analyze(
         trainer=trainer,
         test_data=test_data,
         development_data=(train_data, valid_data),
         recbole_metrics=test_result,
     )
-    return results_path
+    return analysis, results_path
+
+
+def log_fairness(run, analysis, results_path, model_name):
+    for metric in ("ndcg", "mrr", "recall"):
+        for cutoff, value in analysis["evaluation"][metric].items():
+            run.summary[f"test/{metric}@{cutoff}"] = float(value)
+    run.summary["test/users"] = analysis["evaluation"]["test_users"]
+    run.summary["test/interactions"] = analysis["evaluation"]["test_interactions"]
+
+    for grouping, result in analysis["groupings"].items():
+        if result["valid"]:
+            run.summary[f"rgrp/{grouping}"] = float(result["rgrp"])
+        for group, metrics in result["groups"].items():
+            run.summary[f"mse/{grouping}/{group}"] = float(metrics["mse"])
+            for cutoff, value in metrics["ndcg"].items():
+                run.summary[f"ndcg@{cutoff}/{grouping}/{group}"] = float(value)
+
+    clusters_path = results_path.with_name("k_clusters_fairness.json")
+    with clusters_path.open(encoding="utf-8") as input_file:
+        cluster_tables = json.load(input_file)["tables"]
+    for method, table in cluster_tables.items():
+        for row in table["rows"]:
+            if model_name in row:
+                run.summary[f"rgrp_k/{method}/{row['clusters']}"] = float(row[model_name])
 
 
 def main():
     arguments = parse_arguments()
+    tracking_enabled()
     
     warnings.filterwarnings("ignore", category=FutureWarning, module=r"recbole\..*")
     
@@ -142,12 +171,20 @@ def main():
                 f"Analyzing {model_key} on {dataset_name} "
                 f"from {experiment_dir.name}"
             )
-            results_path = analyze_checkpoint(
+            analysis, results_path = analyze_checkpoint(
                 experiment_dir,
                 dataset_dir,
                 dataset_name,
                 model_key,
             )
+            metadata = run_config(
+                experiment_dir, dataset_name, model_key,
+                arguments.user_limit, arguments.item_limit,
+                experiment_seed(experiment_dir),
+            )
+            with track(f"{dataset_name}-{model_key}-fairness", "fairness", metadata, stable=True) as run:
+                if run is not None:
+                    log_fairness(run, analysis, results_path, MODELS[model_key][0])
             print(f"  results: {results_path}")
 
 

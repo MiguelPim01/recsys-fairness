@@ -152,6 +152,29 @@ To analyze an existing experiment through Make:
 make analyze_experiment USER_LIMIT=<N> ITEM_LIMIT=<M> EXPERIMENT=<seed_k>
 ```
 
+### Track experiments with W&B
+
+After `wandb login`, set the project you created and opt in to tracking:
+
+```bash
+RECSYS_WANDB=1 WANDB_PROJECT=recsys-fairness make run_experiments USER_LIMIT=1000 ITEM_LIMIT=1000 SEED=42
+```
+
+Replace `recsys-fairness` with your project name. Set `WANDB_ENTITY` too if the
+project belongs to a team or another account. These variables also work with
+`scripts/evaluate_models.sh` and `scripts/analyze_fairness.sh`. Without
+`RECSYS_WANDB=1`, no W&B runs are created. `WANDB_MODE=offline` saves runs
+locally for later `wandb sync`.
+
+Runs are grouped by sample limits and seed. Each candidate/fold has its own
+training and validation curves; each dataset/model has a final run with
+cross-validation summaries and full-sort test metrics, plus a separate fairness
+run. Reused folds are not logged again, and completed experiments are skipped;
+use a new seed to capture epoch curves for a full experiment. Datasets and
+model checkpoints remain local; W&B also collects its standard run metadata
+and system metrics. RecBole's epoch and validation steps are zero-based in the
+charts.
+
 ## Architecture
 
 ```mermaid
