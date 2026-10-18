@@ -440,48 +440,38 @@ class IModelEvaluator:
         Returns:
             result (dict[str, Any]): Fold index, best epoch, score and metrics.
         """
-        checkpoint_path, _ = checkpoint_store.paths(fold, config_index)
-        temporary_path = temporary_checkpoint(checkpoint_path)
-        try:
-            name = (
-                f"{self.dataset_dir.name}-{self.MODEL_NAME.casefold()}"
-                f"-c{config_index:02d}-f{fold:02d}"
-            )
-            config = run_config(
-                self.experiment_dir, self.dataset_dir.name, self.MODEL_NAME,
-                self.user_limit, self.item_limit, self.seed,
-                config_index=config_index, fold=fold, run_seed=run_seed,
+        name = (
+            f"{self.dataset_dir.name}-{self.MODEL_NAME.casefold()}"
+            f"-c{config_index:02d}-f{fold:02d}"
+        )
+        config = run_config(
+            self.experiment_dir, self.dataset_dir.name, self.MODEL_NAME,
+            self.user_limit, self.item_limit, self.seed,
+            config_index=config_index, fold=fold, run_seed=run_seed,
+            hyperparameters=hyperparameters,
+            recipe_sha256=checkpoint_store.identity,
+        )
+        with track(name, "fold", config) as tracking_run:
+            training = self._train_with_validation(
+                benchmark_filename=benchmark_filename,
                 hyperparameters=hyperparameters,
-                recipe_sha256=checkpoint_store.identity,
+                run_seed=run_seed,
             )
-            with track(name, "fold", config) as tracking_run:
-                training = self._train_with_validation(
-                    benchmark_filename=benchmark_filename,
-                    hyperparameters=hyperparameters,
-                    run_seed=run_seed,
-                    checkpoint_path=temporary_path,
-                )
-                result = {
-                    "fold": fold,
-                    "epoch": training["epoch"],
-                    "score": training["score"],
-                    "metrics": training["metrics"],
-                }
-                self._validate_training_checkpoint(
-                    temporary_path, run_seed, result["epoch"], result["score"]
-                )
-                checkpoint_store.save(
-                    fold, config_index, hyperparameters, run_seed, result,
-                    temporary_path,
-                )
-                if tracking_run is not None:
-                    tracking_run.summary["validation/best_epoch"] = result["epoch"]
-                    tracking_run.summary["validation/best_score"] = result["score"]
-                    for metric, value in result["metrics"].items():
-                        tracking_run.summary[f"validation/best_{metric}"] = value
-                return result
-        finally:
-            temporary_path.unlink(missing_ok=True)
+            result = {
+                "fold": fold,
+                "epoch": training["epoch"],
+                "score": training["score"],
+                "metrics": training["metrics"],
+            }
+            checkpoint_store.save(
+                fold, config_index, hyperparameters, run_seed, result,
+            )
+            if tracking_run is not None:
+                tracking_run.summary["validation/best_epoch"] = result["epoch"]
+                tracking_run.summary["validation/best_score"] = result["score"]
+                for metric, value in result["metrics"].items():
+                    tracking_run.summary[f"validation/best_{metric}"] = value
+            return result
 
     def _evaluate_simple(self):
         config = self._build_config()
@@ -581,7 +571,7 @@ class IModelEvaluator:
         
         return results
 
-    def _train_with_validation(self, benchmark_filename, hyperparameters, run_seed, checkpoint_path):
+    def _train_with_validation(self, benchmark_filename, hyperparameters, run_seed):
         """
         Trains the model with validation and returns the best score and metrics.
 
@@ -608,7 +598,6 @@ class IModelEvaluator:
         train_data, valid_data, _ = data_preparation(config, dataset)
         
         _, trainer = self._create_model_and_trainer(config, train_data)
-        trainer.saved_model_file = str(checkpoint_path)
 
         best_epoch = 0
 
@@ -621,7 +610,7 @@ class IModelEvaluator:
         best_score, best_result = trainer.fit(
             train_data,
             valid_data,
-            saved=True,
+            saved=False,
             show_progress=False,
             verbose=False,
             callback_fn=save_best_epoch,

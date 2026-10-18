@@ -66,7 +66,7 @@ Não atualize os dados processados enquanto houver workers usando-os.
 cd /mnt/cluster-nfs/datasets/$USER/recsys-fairness
 ./slurm/setup_nfs.sh
 ```
-Isso instala recbole/numpy<2/scikit-learn/matplotlib em `pylibs/` e remove o
+Isso instala recbole/numpy<2/scikit-learn/matplotlib/wandb em `pylibs/` e remove o
 torch de lá (o torch bom vem do container). No fim ele importa o recbole
 para confirmar que tudo casa.
 

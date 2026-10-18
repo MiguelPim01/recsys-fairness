@@ -1,4 +1,4 @@
-"""Durable, per-fold validation checkpoints for interrupted experiments."""
+"""Durable fold results and final-model checkpoints for interrupted experiments."""
 
 import hashlib
 import json
@@ -11,21 +11,46 @@ from src.utils.experiments import _atomic_json_write, _file_sha256
 
 LEGACY_EVALUATOR_SHA256 = "4555964934ce75ca3fd410a6e2a9b5bcc3720ac5913bec2ce534f03472e040bd"
 TRACKING_EVALUATOR_SHA256 = "f4748f8f6e930a1ee61e9bbfaaaa63e25fbbb7f4d550399a210263722abedf3e"
+JSON_ONLY_EVALUATOR_SHA256 = "4b2e26be3c363ee846901e4c82a0719c2dfde185f5a3ffb2cd199b3ea800a19f"
 
 
-def _tracking_only_recipe_change(saved: dict, current: dict) -> bool:
+def _compatible_recipe_change(saved: dict, current: dict) -> bool:
     old_sources = saved.get("source_sha256")
     new_sources = current.get("source_sha256")
     if not isinstance(old_sources, dict) or not isinstance(new_sources, dict):
         return False
-    if (
-        old_sources.get("IModelEvaluator") != LEGACY_EVALUATOR_SHA256
-        or new_sources.get("IModelEvaluator") != TRACKING_EVALUATOR_SHA256
-    ):
+    # Only audited changes to tracking and fold persistence may reuse results.
+    compatible_sources = (
+        (LEGACY_EVALUATOR_SHA256, TRACKING_EVALUATOR_SHA256),
+        (LEGACY_EVALUATOR_SHA256, JSON_ONLY_EVALUATOR_SHA256),
+        (TRACKING_EVALUATOR_SHA256, JSON_ONLY_EVALUATOR_SHA256),
+    )
+    source_change = (
+        old_sources.get("IModelEvaluator"), new_sources.get("IModelEvaluator")
+    )
+    if source_change not in compatible_sources:
         return False
     return (
         {**saved, "source_sha256": {**old_sources, "IModelEvaluator": None}}
         == {**current, "source_sha256": {**new_sources, "IModelEvaluator": None}}
+    )
+
+
+def _valid_fold_result(result: dict) -> bool:
+    epoch = result.get("epoch")
+    score = result.get("score")
+    metrics = result.get("metrics")
+    return (
+        type(epoch) is int
+        and epoch >= 1
+        and type(score) in (int, float)
+        and math.isfinite(score)
+        and isinstance(metrics, dict)
+        and bool(metrics)
+        and all(
+            type(value) in (int, float) and math.isfinite(value)
+            for value in metrics.values()
+        )
     )
 
 
@@ -75,8 +100,10 @@ class FoldCheckpointStore:
                     saved = json.load(input_file)
             except (OSError, json.JSONDecodeError) as error:
                 raise ValueError(f"Invalid experiment recipe: {self.recipe_path}") from error
+            if not isinstance(saved, dict):
+                raise ValueError(f"Invalid experiment recipe: {self.recipe_path}")
             if saved != self.recipe:
-                if _tracking_only_recipe_change(saved, self.recipe):
+                if _compatible_recipe_change(saved, self.recipe):
                     # Fold JSONs retain the original recipe hash; keep using it.
                     self.recipe = saved
                     self.identity = recipe_hash(saved)
@@ -98,7 +125,7 @@ class FoldCheckpointStore:
         return directory / f"{self.model}.pth", directory / f"{self.model}.json"
 
     def load(self, fold: int, config_index: int, hyperparameters: dict, seed: int):
-        checkpoint_path, result_path = self.paths(fold, config_index)
+        _, result_path = self.paths(fold, config_index)
         if not result_path.is_file():
             return None
         try:
@@ -118,39 +145,19 @@ class FoldCheckpointStore:
             or record.get("fold") != fold
             or record.get("config_index") != config_index
             or record.get("seed") != seed
-        ):
-            return None
-        epoch = record.get("epoch")
-        score = record.get("score")
-        metrics = record.get("metrics")
-        digest = record.get("checkpoint_sha256")
-        if (
-            not isinstance(epoch, int)
-            or isinstance(epoch, bool)
-            or epoch < 1
-            or not isinstance(score, (int, float))
-            or not math.isfinite(score)
-            or not isinstance(metrics, dict)
-            or not metrics
-            or not all(
-                isinstance(value, (int, float)) and math.isfinite(value)
-                for value in metrics.values()
+            or any(
+                type(record.get(key)) is not int
+                for key in ("fold", "config_index", "seed")
             )
-            or not isinstance(digest, str)
-            or len(digest) != 64
-            or not checkpoint_path.is_file()
         ):
             return None
-        try:
-            if _file_sha256(checkpoint_path) != digest:
-                return None
-        except OSError:
+        if not _valid_fold_result(record):
             return None
         return {
             "fold": fold,
-            "epoch": epoch,
-            "score": float(score),
-            "metrics": metrics,
+            "epoch": record["epoch"],
+            "score": float(record["score"]),
+            "metrics": record["metrics"],
         }
 
     def save(
@@ -160,10 +167,11 @@ class FoldCheckpointStore:
         hyperparameters: dict,
         seed: int,
         result: dict,
-        temporary_path: Path,
     ) -> None:
-        checkpoint_path, result_path = self.paths(fold, config_index)
-        digest = publish_checkpoint(temporary_path, checkpoint_path)
+        if not _valid_fold_result(result):
+            raise ValueError(f"Invalid validation result for {self.model} fold {fold}")
+        _, result_path = self.paths(fold, config_index)
+        result_path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_json_write(result_path, {
             "recipe_sha256": self.identity,
             "model": self.model,
@@ -174,5 +182,4 @@ class FoldCheckpointStore:
             "epoch": result["epoch"],
             "score": result["score"],
             "metrics": result["metrics"],
-            "checkpoint_sha256": digest,
         })

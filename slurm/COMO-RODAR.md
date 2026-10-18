@@ -48,7 +48,7 @@ Não copie uma nova variante enquanto houver workers usando a anterior.
 
 ## 2. Instalar as libs no NFS (uma vez, no servidor)
 
-O container tem o PyTorch, mas não tem o recbole e companhia. Como os nós de
+O container tem o PyTorch, mas não tem o recbole, W&B e demais dependências. Como os nós de
 GPU têm internet instável, a gente instala uma vez a partir do servidor:
 
 ```bash

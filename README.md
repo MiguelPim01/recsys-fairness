@@ -57,7 +57,7 @@ data/sample/<users>_<items>/seed_<K>/<dataset>/
 
 results/<users>_<items>/seed_<K>/<dataset>/
 ├── models/{neumf,multivae}.pth
-├── models/checkpoints/fold_<F>/config_<C>/{neumf,multivae}.{pth,json}
+├── models/checkpoints/fold_<F>/config_<C>/{neumf,multivae}.json
 ├── results.json
 ├── k_clusters_fairness.json
 └── sample_statistics/
@@ -65,18 +65,25 @@ results/<users>_<items>/seed_<K>/<dataset>/
 
 Running the same limits and seed again resumes the experiment. A complete
 experiment is skipped without changing its results; an incomplete experiment
-reuses validated samples, splits, and model checkpoints. Experiments do not
+reuses validated samples, splits, fold results, and final model checkpoints. Experiments do not
 run the ETL: pending seeds require processed LastFM and Yelp files with
 completed transformation manifests, and the Yelp mode must match
 `USE_RESTAURANTS_USERS_ONLY`. `make clean` preserves versioned samples and
 removes only transformed data; run the transformation again after cleaning.
 
-During cross-validation, each completed fold keeps its best model and validation
-metrics in `models/checkpoints/fold_<F>/config_<C>/`. `config_<C>` is the
-zero-based position in that model's hyperparameter list; the JSON records the
-actual values and the checkpoint checksum. Interrupted runs reuse valid folds,
-retrain only missing or damaged folds, and recover a completed final training
-run when possible. Changed datasets or model configurations in the same
+During cross-validation, each completed fold keeps only a JSON with its
+hyperparameters, seed, best epoch, score, validation metrics, and experiment
+recipe identity in `models/checkpoints/fold_<F>/config_<C>/`. `config_<C>` is
+the zero-based position in that model's hyperparameter list. Fold model weights
+are never written, including temporary files. The JSON is published atomically
+after training succeeds and is sufficient to reuse a completed fold.
+Interrupted runs retrain only folds with missing or invalid JSONs; a fold
+interrupted before its result is published restarts from the beginning.
+Existing fold JSONs remain reusable without their old `.pth` files; their
+legacy checkpoint checksum is ignored. Existing weights are not deleted
+automatically. Final models are still saved with checksum verification for
+test evaluation and fairness analysis, and a completed final training run is
+recovered when possible. Changed datasets or model configurations in the same
 experiment directory cause an error; delete that experiment's results directory
 manually to start over with the same user/item limits and seed.
 
@@ -138,7 +145,7 @@ negative items (`uni100`). Hyperparameter selection therefore uses sampled
 Recall, NDCG, and MRR. The final test and group-fairness analysis use full-sort
 evaluation over the complete item catalog.
 
-Training writes fold checkpoints and the final model. Fairness analysis is a separate step
+Training writes fold result JSONs and the final model weights. Fairness analysis is a separate step
 that can be rerun without training:
 
 ```bash

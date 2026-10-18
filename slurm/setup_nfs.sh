@@ -80,6 +80,7 @@ PACKAGES=(
     "plotly>=4.0.0"
     "texttable>=0.9.0"
     "psutil>=5.9.0"
+    "wandb>=0.30.0"
 )
 
 echo ">> instalando dependências do treino no destino..."
@@ -137,6 +138,7 @@ import scipy
 import sklearn
 import torch
 import recbole
+import wandb
 from recbole.config import Config
 from recbole.data import create_dataset, data_preparation
 from recbole.utils import get_model, get_trainer, init_seed
@@ -161,6 +163,7 @@ print('pandas      :', pandas.__version__)
 print('scikit-learn:', sklearn.__version__)
 print('matplotlib  :', matplotlib.__version__)
 print('recbole     :', recbole.__version__)
+print('wandb       :', wandb.__version__)
 print('OK: imports do treino disponíveis com torch do container')
 PY
 
