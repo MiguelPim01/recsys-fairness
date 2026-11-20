@@ -1,0 +1,83 @@
+{
+  "dataset": "yelp",
+  "columns": [
+    "model",
+    "grouping",
+    "rgrp",
+    "rmse"
+  ],
+  "rows": [
+    {
+      "model": "NeuMF",
+      "grouping": "Activity",
+      "rgrp": 0.08699490507937645,
+      "rmse": 1.1837848076653732
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Friends",
+      "rgrp": 0.09180260021898617,
+      "rmse": 1.1837848076653732
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Fans",
+      "rgrp": 0.09265323755846183,
+      "rmse": 1.1837848076653732
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Tenure",
+      "rgrp": 0.0007719524484140135,
+      "rmse": 1.1837848076653732
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "K-Means",
+      "rgrp": 0.09434346286207179,
+      "rmse": 1.1837848076653732
+    },
+    {
+      "model": "NeuMF",
+      "grouping": "Agglomerative",
+      "rgrp": 0.08699883951652872,
+      "rmse": 1.1837848076653732
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Activity",
+      "rgrp": 0.07218360403850528,
+      "rmse": 1.2383362510946874
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Friends",
+      "rgrp": 0.0890998871790766,
+      "rmse": 1.2383362510946874
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Fans",
+      "rgrp": 0.08119355368843129,
+      "rmse": 1.2383362510946874
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Tenure",
+      "rgrp": 0.003497887970823463,
+      "rmse": 1.2383362510946874
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "K-Means",
+      "rgrp": 0.07969066737731821,
+      "rmse": 1.2383362510946874
+    },
+    {
+      "model": "MultiVAE",
+      "grouping": "Agglomerative",
+      "rgrp": 0.0721865302203896,
+      "rmse": 1.2383362510946874
+    }
+  ]
+}

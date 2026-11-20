@@ -1,6 +1,6 @@
-# Recommendation System's Fairness
+# Fairness in Recommender Systems
 
-This repository contains my final thesis work for graduating in Computer Science at UFES.
+This repository contains the code and experimental artifacts used to evaluate group fairness in recommender systems.
 
 ## Installation
 
@@ -213,5 +213,3 @@ graph LR
 
     F --> R
 ```
-
-All methodological decisions are documented in [method_documentation](docs/methodological_notes.md).

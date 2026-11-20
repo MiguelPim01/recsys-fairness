@@ -1,0 +1,51 @@
+{
+  "completed_at": "2026-10-21T21:36:09.446626+00:00",
+  "created_at": "2026-10-09T23:44:41.170065+00:00",
+  "datasets": {
+    "lastfm": {
+      "models": {
+        "multivae": {
+          "checkpoint": "lastfm/models/multivae.pth",
+          "sha256": "94dfa02fe6dfedf511b8cc96c80e56cf2719d7b93283499c25878f7cc4adbd72"
+        },
+        "neumf": {
+          "checkpoint": "lastfm/models/neumf.pth",
+          "sha256": "3ef6aad85a6dc6872b0419f3ca1563f576005c1d2adbb4fd7284d8e8c841f60d"
+        }
+      },
+      "sample": "data/sample/100000_100000/seed_45/lastfm",
+      "sha256": "a2ea5be426c6f8807988ec696a212d60b2bbef64584aadfcca252b7516edec4d",
+      "split_statistics": {
+        "development_interactions": 3910832,
+        "folds": 5,
+        "test_interactions": 926636,
+        "users": 100000
+      }
+    },
+    "yelp": {
+      "models": {
+        "multivae": {
+          "checkpoint": "yelp/models/multivae.pth",
+          "sha256": "8234a19ec4e39bc35026494b7ad32145a340958f36412c3913a18cd5fc155840"
+        },
+        "neumf": {
+          "checkpoint": "yelp/models/neumf.pth",
+          "sha256": "a6c01f9de911a2172dbe078ed7de175f491636efdd20c934f7cba5c5a7463705"
+        }
+      },
+      "sample": "data/sample/100000_100000/seed_45/yelp",
+      "sha256": "a050648e8562146485dcfa481bbb8e02cb4e495ea8b200e22158af222e128866",
+      "split_statistics": {
+        "development_interactions": 1518094,
+        "folds": 5,
+        "test_interactions": 330938,
+        "users": 100000
+      }
+    }
+  },
+  "experiment": "seed_45",
+  "item_limit": 100000,
+  "seed": 45,
+  "status": "complete",
+  "user_limit": 100000
+}

@@ -29,3 +29,19 @@ results/**/models/
 
 # Environment variables
 .env
+
+# Other files
+/docs/analysis/
+/docs/tcc2/
+/docs/*.pdf
+
+/logs/
+
+/slurm/
+
+# Editor temporary files
+*.swp
+*.swo
+
+# Experiment repair backups
+results/**/repair_backups/

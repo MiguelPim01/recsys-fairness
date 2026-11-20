@@ -1,0 +1,140 @@
+{
+  "users": 200,
+  "items": 50,
+  "interactions": 1845,
+  "density": "18.450000%",
+  "groupings": {
+    "activity": {
+      "active": {
+        "users": 12,
+        "percentage": "6.00%"
+      },
+      "inactive": {
+        "users": 188,
+        "percentage": "94.00%"
+      }
+    },
+    "age": {
+      "under_18": {
+        "users": 19,
+        "percentage": "9.50%"
+      },
+      "18_24": {
+        "users": 113,
+        "percentage": "56.50%"
+      },
+      "25_34": {
+        "users": 53,
+        "percentage": "26.50%"
+      },
+      "35_44": {
+        "users": 13,
+        "percentage": "6.50%"
+      },
+      "45_49": {
+        "users": 0,
+        "percentage": "0.00%"
+      },
+      "50_55": {
+        "users": 0,
+        "percentage": "0.00%"
+      },
+      "over_55": {
+        "users": 2,
+        "percentage": "1.00%"
+      },
+      "unknown": {
+        "users": 0,
+        "percentage": "0.00%"
+      }
+    },
+    "gender": {
+      "male": {
+        "users": 154,
+        "percentage": "77.00%"
+      },
+      "female": {
+        "users": 46,
+        "percentage": "23.00%"
+      },
+      "unknown": {
+        "users": 0,
+        "percentage": "0.00%"
+      }
+    },
+    "location": {
+      "north_america": {
+        "users": 44,
+        "percentage": "22.00%"
+      },
+      "europe": {
+        "users": 125,
+        "percentage": "62.50%"
+      },
+      "other_locations": {
+        "users": 31,
+        "percentage": "15.50%"
+      }
+    },
+    "kmeans": {
+      "group_1": {
+        "users": 12,
+        "percentage": "6.00%"
+      },
+      "group_2": {
+        "users": 186,
+        "percentage": "93.00%"
+      },
+      "group_3": {
+        "users": 2,
+        "percentage": "1.00%"
+      }
+    },
+    "agglomerative": {
+      "group_1": {
+        "users": 12,
+        "percentage": "6.00%"
+      },
+      "group_2": {
+        "users": 186,
+        "percentage": "93.00%"
+      },
+      "group_3": {
+        "users": 2,
+        "percentage": "1.00%"
+      }
+    }
+  },
+  "clustering": {
+    "kmeans": {
+      "selected_k": 3,
+      "selected_silhouette": 0.6803580559104273,
+      "silhouette_by_k": {
+        "2": 0.6601139718410363,
+        "3": 0.6803580559104273,
+        "4": 0.4199349830483552,
+        "5": 0.4797975088050854,
+        "6": 0.49304387677607964,
+        "7": 0.5605502115959404,
+        "8": 0.6026802547580383,
+        "9": 0.6175963611058444,
+        "10": 0.6291636622264369
+      }
+    },
+    "agglomerative": {
+      "selected_k": 3,
+      "selected_silhouette": 0.6803580559104273,
+      "silhouette_by_k": {
+        "2": 0.6601139718410363,
+        "3": 0.6803580559104273,
+        "4": 0.4116887266162223,
+        "5": 0.47022289219923286,
+        "6": 0.4738852307174739,
+        "7": 0.540193417523438,
+        "8": 0.5889700708402633,
+        "9": 0.6007814722769337,
+        "10": 0.6274965070635801
+      }
+    }
+  }
+}
